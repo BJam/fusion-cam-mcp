@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "addin",
+    "id": "fusion-cam-mcp-addin",
+    "author": "",
+    "description": {
+        "": "MCP server add-in that exposes Fusion 360 CAM data (setups, operations, tools, feeds/speeds) over a local TCP socket for AI-assisted manufacturing analysis."
+    },
+    "version": "0.1.0",
+    "runOnStartup": false,
+    "supportedOS": "windows|mac",
+    "editEnabled": true
+}
