@@ -1,14 +1,18 @@
 """
-Fusion 360 CAM MCP Add-in
+Fusion MCP Bridge
 
-Exposes Fusion 360 CAM data over a local TCP socket so that an external
-MCP server can query setups, operations, tools, feeds/speeds, and more.
+A generic Fusion 360 add-in that bridges external MCP servers to the
+Fusion Python SDK over a local TCP socket. Any MCP server can send
+Python scripts to be executed on the Fusion main thread.
 
 Architecture:
     - TCP server runs in a background thread (tcp_server.py)
     - Incoming requests are dispatched to the main thread via CustomEvent
-    - CAM API calls execute on the main thread (cam_handler.py)
+    - The executor runs arbitrary Python with adsk.* available (executor.py)
     - Results are passed back to the TCP thread and sent as JSON responses
+
+All business logic lives on the MCP server side. The bridge is a thin
+"run this code on the main thread" proxy.
 """
 
 import adsk.core
@@ -28,15 +32,15 @@ if ADDIN_DIR not in sys.path:
 # Force-reload our modules so that code changes take effect on add-in restart
 # without needing to restart Fusion 360 entirely.
 import importlib
-for _mod_name in ["tcp_server", "cam_handler"]:
+for _mod_name in ["tcp_server", "executor"]:
     if _mod_name in sys.modules:
         importlib.reload(sys.modules[_mod_name])
 
 from tcp_server import JsonTcpServer
-from cam_handler import handle_cam_request
+from executor import execute_request
 
 # Custom event ID for marshaling requests to the main thread
-CUSTOM_EVENT_ID = "FusionCamMcpRequestEvent"
+CUSTOM_EVENT_ID = "FusionMcpBridgeRequestEvent"
 
 # Global references (must stay in scope for Fusion's garbage collector)
 _app = None
@@ -50,13 +54,14 @@ _handlers = []
 _pending_request = None
 _pending_response = None
 _response_ready = threading.Event()
+_dispatch_lock = threading.Lock()
 
 
 def log(msg):
     """Log a message to the Fusion 360 text commands palette."""
     try:
         app = adsk.core.Application.get()
-        app.log(f"[CAM-MCP] {msg}")
+        app.log(f"[MCP-Bridge] {msg}")
     except Exception:
         pass
 
@@ -82,8 +87,8 @@ class MainThreadEventHandler(adsk.core.CustomEventHandler):
                 _response_ready.set()
                 return
 
-            # Execute the CAM handler on the main thread
-            _pending_response = handle_cam_request(request)
+            # Execute the request on the main thread
+            _pending_response = execute_request(request)
 
         except Exception:
             _pending_response = {
@@ -99,28 +104,33 @@ def dispatch_to_main_thread(request):
     Called from the TCP background thread.
     Fires a CustomEvent to run the handler on the main thread,
     then blocks until the response is ready.
+
+    A lock serializes concurrent requests so that the shared globals
+    (_pending_request / _pending_response / _response_ready) are never
+    corrupted by interleaved TCP client threads.
     """
     global _pending_request, _pending_response
 
     # Ping is handled directly without main thread dispatch
     if request.get("action") == "ping":
-        return {"success": True, "data": {"status": "ok", "message": "Fusion 360 CAM MCP add-in is running"}}
+        return {"success": True, "data": {"status": "ok", "message": "Fusion MCP Bridge is running"}}
 
-    _response_ready.clear()
-    _pending_request = request
-    _pending_response = None
+    with _dispatch_lock:
+        _response_ready.clear()
+        _pending_request = request
+        _pending_response = None
 
-    try:
-        app = adsk.core.Application.get()
-        app.fireCustomEvent(CUSTOM_EVENT_ID, json.dumps(request))
-    except Exception:
-        return {"success": False, "error": f"Failed to fire custom event: {traceback.format_exc()}"}
+        try:
+            app = adsk.core.Application.get()
+            app.fireCustomEvent(CUSTOM_EVENT_ID, json.dumps(request))
+        except Exception:
+            return {"success": False, "error": f"Failed to fire custom event: {traceback.format_exc()}"}
 
-    # Wait for the main thread handler to complete (timeout 30s)
-    if not _response_ready.wait(timeout=30.0):
-        return {"success": False, "error": "Timeout waiting for main thread response"}
+        # Wait for the main thread handler to complete (timeout 30s)
+        if not _response_ready.wait(timeout=30.0):
+            return {"success": False, "error": "Timeout waiting for main thread response"}
 
-    return _pending_response
+        return _pending_response
 
 
 def run(context):
@@ -144,11 +154,11 @@ def run(context):
         )
         _tcp_server.start()
 
-        log(f"Fusion 360 CAM MCP add-in started (port {_tcp_server.port})")
+        log(f"Fusion MCP Bridge started (port {_tcp_server.port})")
 
     except Exception:
         if _ui:
-            _ui.messageBox(f"CAM MCP add-in failed to start:\n{traceback.format_exc()}")
+            _ui.messageBox(f"Fusion MCP Bridge failed to start:\n{traceback.format_exc()}")
 
 
 def stop(context):
@@ -169,8 +179,8 @@ def stop(context):
 
         _handlers.clear()
 
-        log("Fusion 360 CAM MCP add-in stopped")
+        log("Fusion MCP Bridge stopped")
 
     except Exception:
         if _ui:
-            _ui.messageBox(f"CAM MCP add-in failed to stop cleanly:\n{traceback.format_exc()}")
+            _ui.messageBox(f"Fusion MCP Bridge failed to stop cleanly:\n{traceback.format_exc()}")

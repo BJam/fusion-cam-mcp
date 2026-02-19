@@ -1,10 +1,10 @@
 {
     "autodeskProduct": "Fusion",
     "type": "addin",
-    "id": "fusion-cam-mcp-addin",
+    "id": "fusion-mcp-bridge",
     "author": "",
     "description": {
-        "": "MCP server add-in that exposes Fusion 360 CAM data (setups, operations, tools, feeds/speeds) over a local TCP socket for AI-assisted manufacturing analysis."
+        "": "Generic Fusion 360 add-in that bridges MCP servers to the Fusion API over a local TCP socket. Executes Python scripts on the main thread via CustomEvent."
     },
     "version": "0.1.0",
     "runOnStartup": false,

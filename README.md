@@ -1,6 +1,10 @@
 # Fusion 360 CAM MCP Server
 
-A read-only MCP server that exposes Fusion 360 CAM/manufacturing data to AI assistants (Cursor, Claude, etc.). Query setups, operations, tools, feeds & speeds, machining times, and toolpath status -- then get AI-powered analysis of your CNC machining parameters.
+An MCP server that exposes Fusion 360 CAM/manufacturing data to AI assistants (Cursor, Claude, etc.). Query setups, operations, tools, feeds & speeds, machining times, and toolpath status -- then get AI-powered analysis of your CNC machining parameters.
+
+Supports both **read-only** (default) and **full** mode with write capabilities for updating feeds/speeds, assigning materials, and modifying machine parameters.
+
+18 tools covering the full CAM workflow: inspect setups, analyze operations, review feeds & speeds, generate toolpaths, and post-process to G-code.
 
 **This is the first MCP server focused on CAM/manufacturing.**
 
@@ -13,20 +17,39 @@ Cursor / Claude  --MCP (stdio)-->  MCP Server (Python)  --TCP-->  Fusion 360 Add
 Two components:
 
 - **MCP Server** (`fusion-cam-mcp-server/`) -- standalone Python process that Cursor launches via stdio. Connects to the add-in over TCP.
-- **Fusion 360 Add-in** (`fusion-cam-mcp-addin/`) -- runs inside Fusion 360, listens on `localhost:9876`, executes CAM API queries on the main thread via `CustomEvent`.
+- **Fusion MCP Bridge** (`fusion-mcp-bridge/`) -- runs inside Fusion 360, listens on `localhost:9876`, executes Python scripts on the main thread via `CustomEvent`. This is a generic bridge -- not CAM-specific -- and could be reused by other MCP servers targeting any Fusion 360 API.
 
 ## Available Tools
+
+### Read Tools
 
 | Tool | Description |
 |------|-------------|
 | `ping` | Health check -- verify the add-in connection is alive |
+| `list_documents` | List all open Fusion 360 documents with CAM summary info |
 | `get_document_info` | Active document name, units, CAM setup/operation counts |
-| `get_setups` | All setups: name, type, stock mode, WCS origin, operation count |
-| `get_operations` | Operations in a setup: type, strategy, tool, feeds, speeds, stepover/stepdown |
-| `get_operation_details` | Full parameter dump + computed metrics (chip load, surface speed, stepover ratio) |
-| `get_tools` | All tools in use: type, diameter, flute count, lengths, which operations use them |
+| `get_setups` | All setups: name, type, machine info, stock dimensions, body materials |
+| `get_operations` | Operations with type, strategy, tool info, feeds, speeds, coolant, notes, stepover/stepdown |
+| `get_operation_details` | Full parameter dump organized by category (feeds, speeds, engagement, linking, drilling, passes, heights, strategy) + computed metrics (chip load, surface speed, stepover ratio) |
+| `get_tools` | All tools in use: type, diameter, flute count, lengths, holder info, which operations use them |
 | `get_machining_time` | Estimated cycle time per setup/operation |
 | `get_toolpath_status` | Which toolpaths are generated, valid, outdated, or have warnings |
+| `get_nc_programs` | List all NC programs with their operations, post-processor config, and output settings |
+| `list_material_libraries` | Browse available material libraries and their materials |
+| `get_material_properties` | Read all physical/mechanical properties of a specific material |
+| `generate_toolpaths` | Trigger toolpath generation for specific operations or entire setups |
+| `post_process` | Post-process a setup to generate NC/G-code files using the configured post processor |
+
+### Write Tools (requires `--mode full`) - USE AT YOUR OWN RISK
+
+| Tool | Description |
+|------|-------------|
+| `update_operation_parameters` | Update feeds, speeds, and engagement parameters on a CAM operation |
+| `assign_body_material` | Assign a physical material from a library to a body |
+| `create_custom_material` | Create a new material by copying an existing one and overriding properties |
+| `update_setup_machine_params` | Update machine-level parameters on a setup (spindle limits, feed limits, etc.) |
+
+All write tools return a before/after diff showing exactly what changed.
 
 ## Setup
 
@@ -52,48 +75,50 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-### 2. Install the Fusion 360 add-in
-
-**Automatic (macOS/Windows):**
-
-```bash
-./install.sh
-```
-
-This creates a symlink from Fusion's AddIns directory to the add-in source, so edits are reflected immediately.
-
-**Manual:**
-
-Symlink or copy `fusion-cam-mcp-addin/` into Fusion 360's add-ins directory:
-
-- **macOS:** `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/`
-- **Windows:** `%APPDATA%/Autodesk/Autodesk Fusion 360/API/AddIns/`
-
-### 3. Start the add-in in Fusion 360
+### 2. Install and start the Fusion MCP Bridge
 
 1. Open Fusion 360
 2. Go to **UTILITIES > ADD-INS** (or press `Shift+S`)
-3. In the **Add-Ins** tab, find `fusion-cam-mcp-addin`
-4. Click **Run**
+3. In the **Add-Ins** tab, click the green **+** button next to "My Add-Ins"
+4. Navigate to the `fusion-mcp-bridge` folder inside this repo and click **Open**
+5. Select `fusion-mcp-bridge` in the list and click **Run**
 
-The add-in will begin listening on `localhost:9876`.
+The bridge will appear in your Add-Ins list and begin listening on `localhost:9876`. Check "Run on Startup" if you want it to start automatically with Fusion.
 
-### 4. Configure Cursor MCP
+### 3. Configure Cursor MCP
 
-Add this to your Cursor MCP settings (`.cursor/mcp.json` or global settings):
+Add one of the following to your Cursor MCP settings (`.cursor/mcp.json` or global settings), then replace `/absolute/path/to/fusion-cam-mcp` with the actual path to this repo:
+
+**Read-only mode (default, safe for exploration):**
 
 ```json
 {
   "mcpServers": {
-    "fusion360-cam": {
+    "fusion360-cam-mcp-read-only": {
       "command": "/absolute/path/to/fusion-cam-mcp/.venv/bin/python",
-      "args": ["/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py"]
+      "args": [
+        "/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py"
+      ]
     }
   }
 }
 ```
 
-Replace `/absolute/path/to/fusion-cam-mcp` with the actual path to this repo.
+**Full mode (enables write operations):**
+
+```json
+{
+  "mcpServers": {
+    "fusion360-cam-mcp-full": {
+      "command": "/absolute/path/to/fusion-cam-mcp/.venv/bin/python",
+      "args": [
+        "/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py",
+        "--mode", "full"
+      ]
+    }
+  }
+}
+```
 
 ## Usage Examples
 
@@ -105,12 +130,19 @@ Once connected, ask your AI assistant things like:
 - "Are any toolpaths outdated or need regeneration?"
 - "How long will each setup take to machine?"
 - "Compare the stepover ratios across my finishing operations"
+- "What material is assigned to the body in Setup 1?"
+- "What coolant mode is set on each operation?"
+- "Show me the linking parameters for my contour operation"
+- "Change the spindle speed on my finishing pass to 18000 rpm"
+- "Assign Aluminum 6061 to the part body"
+- "Regenerate toolpaths for all operations in Setup 1"
+- "Post-process Setup 1 and output the G-code to my desktop"
 
 ## Configuration
 
 ### TCP Port
 
-The default TCP port is `9876`. Override it by setting the `FUSION_CAM_MCP_PORT` environment variable -- both the add-in and the MCP server read it:
+The default TCP port is `9876`. Override it by setting the `FUSION_CAM_MCP_PORT` environment variable -- both the bridge and the MCP server read it:
 
 ```json
 {
@@ -126,34 +158,79 @@ The default TCP port is `9876`. Override it by setting the `FUSION_CAM_MCP_PORT`
 }
 ```
 
+### Machining Time Estimates
+
+The `get_machining_time` tool uses these default assumptions when estimating cycle times:
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| Feed scale | 1.0 | Multiplier on programmed feed rates |
+| Rapid feed | 500 cm/min (~200 IPM) | Machine rapid traverse rate |
+| Tool change time | 15 seconds | Time per tool change |
+
+These are reasonable defaults for many machines. Your actual cycle times will vary based on your machine's rapid rates and tool changer speed.
+
 ## Project Structure
 
 ```
 fusion-cam-mcp/
+  LICENSE
   README.md
+  CHANGELOG.md
+  CONTRIBUTING.md
+  pyproject.toml                 # Python packaging configuration
   requirements.txt               # MCP server dependencies (mcp, pydantic)
-  install.sh                     # Symlinks add-in into Fusion's AddIns dir
   .gitignore
+  .github/
+    pull_request_template.md
+    ISSUE_TEMPLATE/
+      bug_report.md
+      feature_request.md
   fusion-cam-mcp-server/
     server.py                    # MCP server entry point (FastMCP, stdio)
     fusion_client.py             # TCP client to communicate with add-in
-  fusion-cam-mcp-addin/
-    fusion-cam-mcp-addin.py      # Add-in entry point (run/stop)
-    fusion-cam-mcp-addin.manifest # Fusion add-in manifest
-    cam_handler.py               # CAM API query handlers
+    queries/
+      __init__.py                # Query loader (caches scripts, prepends helpers)
+      _helpers.py                # Shared constants, parameter maps, utility functions
+      get_document_info.py       # Document name, units, CAM counts
+      list_documents.py          # All open documents with CAM summary
+      get_setups.py              # Setups with machine/stock/material info
+      get_operations.py          # Operations with feeds, speeds, tools, coolant, notes
+      get_operation_details.py   # Full parameter dump + computed metrics
+      get_tools.py               # Tool inventory with holder info
+      get_machining_time.py      # Cycle time estimates
+      get_toolpath_status.py     # Toolpath generation status
+      get_nc_programs.py         # NC programs with post-processor config
+      generate_toolpaths.py      # Trigger toolpath generation
+      post_process.py            # Post-process to NC/G-code output
+      list_material_libraries.py # Browse material libraries
+      get_material_properties.py # Read material properties
+      update_operation_params.py # Write: update feeds/speeds/engagement
+      update_setup_machine_params.py # Write: update machine parameters
+      assign_body_material.py    # Write: assign material to body
+      create_custom_material.py  # Write: create custom material from copy
+  fusion-mcp-bridge/
+    fusion-mcp-bridge.py         # Add-in entry point (run/stop)
+    fusion-mcp-bridge.manifest   # Fusion add-in manifest
+    executor.py                  # Generic Python script executor (exec engine)
     tcp_server.py                # TCP listener + JSON framing
 ```
 
 ## How It Works
 
-1. The Fusion 360 add-in starts a TCP server in a background thread
-2. When a request arrives, it fires a `CustomEvent` to marshal the call onto Fusion's main thread (required for all `adsk.*` API access)
-3. The CAM handler queries Fusion's API (`adsk.cam`) and returns JSON
-4. The MCP server receives the JSON over TCP and returns it as an MCP tool result
-5. The AI assistant parses the data and provides analysis
+1. The Fusion MCP Bridge starts a TCP server in a background thread, bound to `localhost` only
+2. The MCP server loads query scripts from the `queries/` directory and sends them over TCP
+3. When a request arrives, the bridge fires a `CustomEvent` to marshal the call onto Fusion's main thread (required for all `adsk.*` API access)
+4. The executor runs the query script via `exec()` with the Fusion SDK available in the namespace
+5. The result is serialized as JSON and sent back over TCP to the MCP server
+6. The AI assistant parses the data and provides analysis
 
-## Future Plans
+This architecture means all business logic lives in the `queries/` directory on the MCP server side. Iterating on query logic only requires restarting the MCP server -- no Fusion MCP Bridge restart needed.
 
-- **Phase 2:** Write operations -- modify feeds/speeds, reorder operations, change tools
-- **Phase 3:** Toolpath generation, post-processing integration
-- **Phase 4:** Built-in machining knowledge base with material-specific recommendations
+### Security Note
+
+The bridge's executor runs Python scripts sent over TCP. This is by design -- it allows the MCP server to send query logic without requiring a bridge restart. The TCP server is bound to `127.0.0.1` (localhost only), so only local processes can connect. No remote access is possible.
+
+## License
+
+[MIT](LICENSE)
