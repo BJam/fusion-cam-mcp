@@ -14,10 +14,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             artifact: fusion-cam-mcp-darwin-arm64
-          - os: macos-13
+          - os: macos-15-intel
             arch: x64
             artifact: fusion-cam-mcp-darwin-x64
           - os: windows-latest

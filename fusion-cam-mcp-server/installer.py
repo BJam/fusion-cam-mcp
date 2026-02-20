@@ -25,11 +25,24 @@ INSTALL_DIR = os.path.join(os.path.expanduser("~"), "fusion-cam-mcp")
 ADDIN_DEST = os.path.join(INSTALL_DIR, "fusion-mcp-bridge")
 
 
+def _get_binary_name() -> str:
+    if platform.system() == "Windows":
+        return "fusion-cam-mcp.exe"
+    return "fusion-cam-mcp"
+
+
 def _get_binary_path() -> str:
     """Resolve the absolute path of the running binary / script."""
     if getattr(sys, "frozen", False):
         return os.path.abspath(sys.executable)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "server.py"))
+
+
+def _get_installed_binary_path() -> str:
+    """The permanent location for the binary inside INSTALL_DIR."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(INSTALL_DIR, _get_binary_name())
+    return _get_binary_path()
 
 
 def _get_bundled_addin_dir() -> str:
@@ -69,6 +82,28 @@ def _prompt(message: str, default: str = "1") -> str:
         print()
         sys.exit(1)
     return answer or default
+
+
+# ── Binary relocation ─────────────────────────────────────────────────
+
+def _install_binary() -> str:
+    """Copy the binary into INSTALL_DIR so it has a permanent home.
+    Returns the installed path. No-op when running from source."""
+    if not getattr(sys, "frozen", False):
+        return _get_binary_path()
+
+    src = _get_binary_path()
+    dest = _get_installed_binary_path()
+    os.makedirs(INSTALL_DIR, exist_ok=True)
+
+    if os.path.abspath(src) == os.path.abspath(dest):
+        return dest
+
+    shutil.copy2(src, dest)
+    if platform.system() != "Windows":
+        os.chmod(dest, 0o755)
+
+    return dest
 
 
 # ── Add-in extraction ─────────────────────────────────────────────────
@@ -145,14 +180,12 @@ def _merge_config(target_path: str, label: str, servers: dict) -> None:
 # ── Main install flow ─────────────────────────────────────────────────
 
 def run_install() -> None:
-    binary_path = _get_binary_path()
-
     print()
     print("╔══════════════════════════════════════════════╗")
     print("║     Fusion 360 CAM MCP — Install             ║")
     print("╚══════════════════════════════════════════════╝")
     print()
-    print(f"  Binary: {binary_path}")
+    print(f"  Install dir: {INSTALL_DIR}")
     print()
 
     # ── Mode ──
@@ -174,13 +207,19 @@ def run_install() -> None:
     print()
     target_choice = _prompt("Choice", "1")
 
+    # ── Install binary ──
+    print()
+    print("── Installing binary ──")
+    binary_path = _install_binary()
+    print(f"  Binary installed to: {binary_path}")
+
     # ── Extract add-in ──
     print()
     print("── Extracting Fusion MCP Bridge add-in ──")
     addin_path = _extract_addin()
     print(f"  Add-in files extracted to: {addin_path}")
 
-    # ── Write MCP config ──
+    # ── Write MCP config (points to permanent binary location) ──
     servers = _build_mcp_servers(binary_path, mode_choice)
 
     print()

@@ -84,7 +84,7 @@ The script will prompt you to choose:
 
 Existing MCP configs are merged -- the script won't overwrite your other servers.
 
-> **macOS Gatekeeper note:** The install script automatically clears the quarantine flag on the downloaded binary. If macOS still blocks it, right-click the binary and select "Open", or run: `xattr -d com.apple.quarantine ~/fusion-cam-mcp/fusion-cam-mcp`
+> **macOS Gatekeeper note:** Since the binary is not code-signed, macOS will block it on first run. Go to **System Settings > Privacy & Security**, scroll to the bottom, and click **Allow Anyway** next to the blocked binary. The install script also runs `xattr -d com.apple.quarantine` which can prevent the block if applied before the first launch attempt.
 
 ### 2. Install the Fusion MCP Bridge add-in
 
