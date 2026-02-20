@@ -2,9 +2,8 @@ name: Build & Release
 
 on:
   push:
-    # TODO: revert to tags-only once testing is complete
-    # tags:
-    #   - "v*"
+    tags:
+      - "v*"
 
 permissions:
   contents: write
