@@ -78,12 +78,13 @@ def run(params):
 
     details["parameters"] = all_parameters
 
-    # Computed metrics — read raw internal values (cm, cm/min) directly
-    # from the API objects so we're not affected by display-unit conversion.
+    # Computed metrics using UnitsManager.convert() for all unit math.
     computed = {}
     try:
+        um = cam.unitsManager
+
         def _raw(param_set, name):
-            """Read raw .value from a parameter set (internal units)."""
+            """Read raw internal .value from a parameter set."""
             try:
                 p = param_set.itemByName(name)
                 if p is None:
@@ -97,27 +98,30 @@ def run(params):
         diameter_cm = _raw(tool_obj.parameters, "tool_diameter") if tool_obj else None
         flutes = _raw(tool_obj.parameters, "tool_numberOfFlutes") if tool_obj else None
         rpm = _raw(op_params, "tool_spindleSpeed")
-        feed_cm_min = _raw(op_params, "tool_feedCutting")
+        feed_mm_min = _raw(op_params, "tool_feedCutting")
 
         if diameter_cm and rpm:
-            ss_cm_min = math.pi * diameter_cm * rpm
+            diameter_mm = um.convert(diameter_cm, "cm", "mm")
+            ss_m_min = math.pi * diameter_mm * rpm / 1000
             computed["surfaceSpeed"] = {
-                "value": round(ss_cm_min / 100, 2),
+                "value": round(ss_m_min, 2),
                 "unit": "m/min",
             }
+            ss_ft_min = um.convert(ss_m_min, "m/min", "ft/min")
             computed["surfaceSpeedImperial"] = {
-                "value": round(ss_cm_min / 100 * 3.28084, 2),
+                "value": round(ss_ft_min, 2),
                 "unit": "ft/min",
             }
 
-        if feed_cm_min and rpm and flutes and flutes > 0:
-            chip_load_cm = feed_cm_min / (rpm * flutes)
+        if feed_mm_min and rpm and flutes and flutes > 0:
+            chip_load_mm = feed_mm_min / (rpm * flutes)
             computed["chipLoad"] = {
-                "value": round(chip_load_cm * 10, 4),
+                "value": round(chip_load_mm, 4),
                 "unit": "mm/tooth",
             }
+            chip_load_in = um.convert(chip_load_mm, "mm", "in")
             computed["chipLoadImperial"] = {
-                "value": round(chip_load_cm / 2.54, 5),
+                "value": round(chip_load_in, 5),
                 "unit": "in/tooth",
             }
 

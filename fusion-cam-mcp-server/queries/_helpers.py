@@ -37,11 +37,16 @@
 #   _find_library_by_name(library_name)
 #   _find_material_in_library(library_name, material_name)
 #
+# Unit conversion (uses Fusion 360 native APIs):
+#   _CAM_INTERNAL_UNITS            - FloatParameterValueTypes → internal unit
+#   _CAM_DISPLAY_UNITS             - FloatParameterValueTypes → display units
+#   _get_units_manager()           - Cached UnitsManager for active document
+#   _is_imperial()                 - Cached imperial-units check
+#
 # Parameter read/write:
 #   _read_param(params, name)           - Safe single-param read
 #   _read_param_raw(params, name)       - Same as _read_param (compat alias)
-#   _safe_param_value(param)            - Full type-aware extraction
-#   _parse_expression(expr)             - Parse expression → (number, unit)
+#   _safe_param_value(param)            - FloatParameterValue.type + convert()
 #   _numval(v)                          - Unwrap dict-or-bare to number
 #   _write_param(params, name, expr)    - Set by expression string
 #   _capture_param_snapshot(params, names)
@@ -337,41 +342,91 @@ def _get_document_units(doc):
     return "unknown"
 
 
-import re
-_EXPR_RE = re.compile(
-    r'^([+-]?[\d.]+(?:[eE][+-]?\d+)?)\s*([a-zA-Z][a-zA-Z°/²³]*(?:\s*/\s*[a-zA-Z°²³]+)*)$'
-)
+# FloatParameterValueTypes enum → internal unit string.
+# Source: Fusion 360 API docs (CAMParameter_value.htm, FloatParameterValueTypes.htm)
+_CAM_INTERNAL_UNITS = {
+    1: "cm",         # LengthValueType
+    2: "deg",        # AngleValueType (docs say rad, but CAM actually stores degrees)
+    3: "mm/min",     # LinearVelocityValueType
+    4: "rpm",        # RotationalVelocityValueType
+    5: "s",          # TimeValueType
+    6: "kg",         # WeightValueType
+    7: "W",          # PowerValueType
+    8: "l/min",      # FlowRateValueType
+    9: "cm*cm",      # AreaValueType
+    10: "cm*cm*cm",  # VolumeValueType
+    11: "C",         # TemperatureValueType
+}
+
+# FloatParameterValueTypes enum → (metric_display_unit, imperial_display_unit)
+_CAM_DISPLAY_UNITS = {
+    1: ("mm", "in"),
+    2: ("deg", "deg"),
+    3: ("mm/min", "in/min"),
+    4: ("rpm", "rpm"),
+    5: ("s", "s"),
+    6: ("kg", "lb"),
+    7: ("W", "W"),
+    8: ("l/min", "l/min"),
+    9: ("mm*mm", "in*in"),
+    10: ("mm*mm*mm", "in*in*in"),
+    11: ("C", "C"),
+}
+
+_um_cache = {}
+_imperial_cache = {}
 
 
-def _parse_expression(expr):
-    """Parse a Fusion expression into (display_value, unit).
+def _get_units_manager():
+    """Get the active document's UnitsManager, cached per query execution."""
+    try:
+        app = adsk.core.Application.get()
+        doc = app.activeDocument
+        doc_id = id(doc)
+        if doc_id not in _um_cache:
+            um = None
+            design = adsk.fusion.Design.cast(
+                doc.products.itemByProductType("DesignProductType")
+            )
+            if design:
+                um = design.unitsManager
+            else:
+                cam = adsk.cam.CAM.cast(
+                    doc.products.itemByProductType(CAM_PRODUCT_TYPE)
+                )
+                if cam:
+                    um = cam.unitsManager
+            _um_cache[doc_id] = um
+        return _um_cache.get(doc_id)
+    except Exception:
+        return None
 
-    Handles simple "<number> <unit>" expressions like "50 mm",
-    "2000 mm/min", "18000 rpm", "45 deg".
-    Returns (float, str) on success, (None, None) for formulas,
-    bare numbers, or unparseable expressions.
-    """
-    if not expr or not isinstance(expr, str):
-        return None, None
-    m = _EXPR_RE.match(expr.strip())
-    if m:
-        try:
-            return float(m.group(1)), m.group(2).strip()
-        except ValueError:
-            pass
-    return None, None
+
+def _is_imperial():
+    """Check if the active document uses imperial distance units, cached."""
+    try:
+        app = adsk.core.Application.get()
+        doc = app.activeDocument
+        doc_id = id(doc)
+        if doc_id not in _imperial_cache:
+            _imperial_cache[doc_id] = _get_document_units(doc) in ("in", "ft")
+        return _imperial_cache[doc_id]
+    except Exception:
+        return False
 
 
 def _safe_param_value(param):
-    """Safely extract a parameter value, handling different parameter types.
+    """Safely extract a parameter value with display-unit conversion.
 
-    For numeric values returns a dict with:
-      value      – display-unit number parsed from expression (e.g. 6.0 for "6 mm")
-      unit       – display unit (e.g. "mm")
-      expression – the full expression string from Fusion
+    Uses FloatParameterValue.type to determine the internal unit, then
+    UnitsManager.convert() to produce the display-unit value. This is
+    robust for ALL float parameters without needing per-name mappings.
 
-    When the expression is a formula or can't be parsed, value falls back
-    to Fusion's internal representation and unit is omitted.
+    Returns:
+      - For floats: {"value": display_number, "unit": "mm", "expression": "..."}
+      - For bools: True/False
+      - For strings: the string value
+      - None on failure
     """
     if param is None:
         return None
@@ -382,23 +437,38 @@ def _safe_param_value(param):
         except Exception:
             pass
 
-        val = param.value
-        if hasattr(val, "value"):
-            val = val.value
+        val_obj = param.value
 
-        if isinstance(val, bool):
-            return val
-        elif isinstance(val, (int, float)):
-            if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
-                return str(val)
-            display_val, unit = _parse_expression(expr)
-            if display_val is not None and unit:
-                return {"value": display_val, "unit": unit, "expression": expr}
-            return {"value": val, "expression": expr if expr else str(val)}
-        elif isinstance(val, str):
-            return val
+        float_val = adsk.cam.FloatParameterValue.cast(val_obj)
+        if float_val is not None:
+            raw = float_val.value
+            if isinstance(raw, float) and (math.isnan(raw) or math.isinf(raw)):
+                return str(raw)
+            val_type = float_val.type
+            internal_unit = _CAM_INTERNAL_UNITS.get(val_type)
+            display_pair = _CAM_DISPLAY_UNITS.get(val_type)
+            if internal_unit and display_pair:
+                target = display_pair[1] if _is_imperial() else display_pair[0]
+                um = _get_units_manager()
+                if um:
+                    display_val = um.convert(raw, internal_unit, target)
+                    if display_val != -1:
+                        return {"value": round(display_val, 6), "unit": target, "expression": expr}
+            return {"value": raw, "expression": expr}
+
+        if hasattr(val_obj, "value"):
+            val_obj = val_obj.value
+
+        if isinstance(val_obj, bool):
+            return val_obj
+        elif isinstance(val_obj, (int, float)):
+            if isinstance(val_obj, float) and (math.isnan(val_obj) or math.isinf(val_obj)):
+                return str(val_obj)
+            return {"value": val_obj, "expression": expr if expr else str(val_obj)}
+        elif isinstance(val_obj, str):
+            return val_obj
         else:
-            return str(val) if val is not None else None
+            return str(val_obj) if val_obj is not None else None
     except Exception:
         try:
             val = param.value
