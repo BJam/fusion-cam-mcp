@@ -39,8 +39,10 @@
 #
 # Parameter read/write:
 #   _read_param(params, name)           - Safe single-param read
-#   _read_param_raw(params, name)       - Raw .value read
+#   _read_param_raw(params, name)       - Same as _read_param (compat alias)
 #   _safe_param_value(param)            - Full type-aware extraction
+#   _parse_expression(expr)             - Parse expression → (number, unit)
+#   _numval(v)                          - Unwrap dict-or-bare to number
 #   _write_param(params, name, expr)    - Set by expression string
 #   _capture_param_snapshot(params, names)
 #   _build_diff(before, after, labels)
@@ -335,8 +337,42 @@ def _get_document_units(doc):
     return "unknown"
 
 
+import re
+_EXPR_RE = re.compile(
+    r'^([+-]?[\d.]+(?:[eE][+-]?\d+)?)\s*([a-zA-Z][a-zA-Z°/²³]*(?:\s*/\s*[a-zA-Z°²³]+)*)$'
+)
+
+
+def _parse_expression(expr):
+    """Parse a Fusion expression into (display_value, unit).
+
+    Handles simple "<number> <unit>" expressions like "50 mm",
+    "2000 mm/min", "18000 rpm", "45 deg".
+    Returns (float, str) on success, (None, None) for formulas,
+    bare numbers, or unparseable expressions.
+    """
+    if not expr or not isinstance(expr, str):
+        return None, None
+    m = _EXPR_RE.match(expr.strip())
+    if m:
+        try:
+            return float(m.group(1)), m.group(2).strip()
+        except ValueError:
+            pass
+    return None, None
+
+
 def _safe_param_value(param):
-    """Safely extract a parameter value, handling different parameter types."""
+    """Safely extract a parameter value, handling different parameter types.
+
+    For numeric values returns a dict with:
+      value      – display-unit number parsed from expression (e.g. 6.0 for "6 mm")
+      unit       – display unit (e.g. "mm")
+      expression – the full expression string from Fusion
+
+    When the expression is a formula or can't be parsed, value falls back
+    to Fusion's internal representation and unit is omitted.
+    """
     if param is None:
         return None
     try:
@@ -355,6 +391,9 @@ def _safe_param_value(param):
         elif isinstance(val, (int, float)):
             if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
                 return str(val)
+            display_val, unit = _parse_expression(expr)
+            if display_val is not None and unit:
+                return {"value": display_val, "unit": unit, "expression": expr}
             return {"value": val, "expression": expr if expr else str(val)}
         elif isinstance(val, str):
             return val
@@ -382,17 +421,25 @@ def _read_param(params, name):
 
 
 def _read_param_raw(params, name):
-    """Read a raw parameter value (just the .value), useful for tool params."""
+    """Read a parameter with display-unit value + unit when available.
+
+    For numeric values returns the same dict format as _safe_param_value.
+    For strings/bools returns the value directly.
+    """
     try:
         param = params.itemByName(name)
         if param is None:
             return None
-        val = param.value
-        if hasattr(val, "value"):
-            return val.value
-        return val
+        return _safe_param_value(param)
     except Exception:
         return None
+
+
+def _numval(v):
+    """Unwrap a value that may be a dict (from _safe_param_value / _read_param_raw) or a bare number."""
+    if isinstance(v, dict):
+        return v.get("value")
+    return v
 
 
 def _is_proxy_str(val):
@@ -576,9 +623,7 @@ def _get_tool_info(op):
                     holder_params = holder.parameters
                     for i in range(holder_params.count):
                         p = holder_params.item(i)
-                        val = p.value
-                        if hasattr(val, "value"):
-                            val = val.value
+                        val = _safe_param_value(p)
                         if val is not None and not _is_proxy_str(str(val)):
                             holder_info[p.name] = val
                 except Exception:
@@ -659,10 +704,13 @@ def _get_coolant_info(op):
             return None
         coolant_val = _read_param_raw(tool.parameters, "tool_coolant")
         if coolant_val is not None:
+            if isinstance(coolant_val, dict):
+                return coolant_val.get("expression", str(coolant_val.get("value")))
             return str(coolant_val)
-        # Fallback: try reading from operation parameters
         op_coolant = _read_param(op.parameters, "tool_coolant")
         if op_coolant is not None:
+            if isinstance(op_coolant, dict):
+                return op_coolant.get("expression", str(op_coolant.get("value")))
             return str(op_coolant) if not isinstance(op_coolant, str) else op_coolant
     except Exception:
         pass

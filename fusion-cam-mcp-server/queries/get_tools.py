@@ -23,7 +23,7 @@ def run(params):
             tool = op.tool
             if not tool:
                 continue
-            tn = _read_param_raw(tool.parameters, "tool_number")
+            tn = _numval(_read_param_raw(tool.parameters, "tool_number"))
             if tn is not None:
                 ops_by_tool_num.setdefault(tn, []).append(op.name)
         except Exception:
@@ -66,7 +66,7 @@ def run(params):
                 if presets:
                     info["presets"] = presets
 
-                tool_num = info.get("tool_number")
+                tool_num = _numval(info.get("tool_number"))
                 used_in = ops_by_tool_num.get(tool_num, [])
 
                 tools_list.append({
@@ -86,7 +86,7 @@ def run(params):
             tool_info = _get_tool_info(op)
             if not tool_info:
                 continue
-            tool_num = tool_info.get("tool_number", f"unknown_{i}")
+            tool_num = _numval(tool_info.get("tool_number")) or f"unknown_{i}"
             if tool_num not in tools_by_number:
                 tools_by_number[tool_num] = {
                     "tool": tool_info,
