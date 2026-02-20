@@ -28,9 +28,9 @@ def run(params):
     op_params = op.parameters
     all_parameters = {}
 
-    for category, param_map in ALL_PARAM_CATEGORIES.items():
+    for category, param_set in ALL_PARAM_CATEGORIES.items():
         cat_data = {}
-        for key, label in param_map.items():
+        for key in param_set:
             try:
                 p = op_params.itemByName(key)
                 if p is None:
@@ -38,43 +38,31 @@ def run(params):
                 val = _safe_param_value(p)
                 if val is None:
                     continue
-                entry = {"label": label, "value": val}
-                try:
-                    if not p.isEnabled:
-                        entry["isEnabled"] = False
-                except Exception:
-                    pass
-                try:
-                    if not p.isEditable:
-                        entry["isEditable"] = False
-                except Exception:
-                    pass
+                entry = {"label": _param_label(p), "value": val}
+                enabled = _safe_attr(p, "isEnabled")
+                if enabled is not None and not enabled:
+                    entry["isEnabled"] = False
+                editable = _safe_attr(p, "isEditable")
+                if editable is not None and not editable:
+                    entry["isEditable"] = False
                 cat_data[key] = entry
             except Exception:
                 pass
         if cat_data:
             all_parameters[category] = cat_data
 
-    # Also read uncategorized parameters, but only visible/enabled ones
-    try:
-        extra_params = {}
-        for i in range(op_params.count):
-            param = op_params.item(i)
-            name = param.name
-            if name in ALL_KNOWN_PARAMS:
-                continue
-            try:
-                if not param.isVisible:
-                    continue
-            except Exception:
-                pass
-            val = _safe_param_value(param)
-            if val is not None:
-                extra_params[name] = val
-        if extra_params:
-            all_parameters["other"] = extra_params
-    except Exception:
-        pass
+    # Auto-categorize parameters not in the explicit sets
+    for p in _safe_iter(op_params):
+        name = p.name
+        if name in ALL_KNOWN_PARAMS:
+            continue
+        visible = _safe_attr(p, "isVisible")
+        if visible is not None and not visible:
+            continue
+        val = _safe_param_value(p)
+        if val is not None:
+            cat = _categorize_param(name)
+            all_parameters.setdefault(cat, {})[name] = val
 
     details["parameters"] = all_parameters
 

@@ -36,16 +36,11 @@ def run(params):
         }
 
         materials = []
-        for j in range(lib.materials.count):
-            mat = lib.materials.item(j)
+        for mat in _safe_iter(lib.materials):
             mat_info = {"name": mat.name}
-
-            try:
-                if hasattr(mat, "id") and mat.id:
-                    mat_info["id"] = mat.id
-            except Exception:
-                pass
-
+            mat_id = _safe_attr(mat, "id")
+            if mat_id:
+                mat_info["id"] = mat_id
             materials.append(mat_info)
 
         lib_info["materials"] = materials

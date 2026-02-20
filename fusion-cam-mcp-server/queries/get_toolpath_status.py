@@ -23,8 +23,7 @@ def run(params):
         operations = cam.allOperations
 
     statuses = []
-    for i in range(operations.count):
-        op = operations.item(i)
+    for op in _safe_iter(operations):
         status = {
             "name": op.name,
             "isSuppressed": op.isSuppressed,
@@ -32,22 +31,17 @@ def run(params):
         }
 
         if op.hasToolpath:
-            try:
-                status["isToolpathValid"] = op.isToolpathValid
-            except Exception:
-                pass
+            valid = _safe_attr(op, "isToolpathValid")
+            if valid is not None:
+                status["isToolpathValid"] = valid
 
-        try:
-            gen_state = op.generationStatus
+        gen_state = _safe_attr(op, "generationStatus")
+        if gen_state is not None:
             status["generationStatus"] = str(gen_state)
-        except Exception:
-            pass
 
-        try:
-            if hasattr(op, "warning") and op.warning:
-                status["warning"] = op.warning
-        except Exception:
-            pass
+        warning = _safe_attr(op, "warning")
+        if warning:
+            status["warning"] = warning
 
         statuses.append(status)
 

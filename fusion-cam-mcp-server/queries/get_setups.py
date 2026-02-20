@@ -21,90 +21,59 @@ def run(params):
             "operationCount": setup.allOperations.count,
         }
 
-        try:
-            setup_info["type"] = OPERATION_TYPE_MAP.get(
-                setup.operationType, str(setup.operationType)
-            )
-        except Exception:
-            pass
+        op_type = _safe_attr(setup, "operationType")
+        if op_type is not None:
+            setup_info["type"] = OPERATION_TYPE_MAP.get(op_type, str(op_type))
 
         # ── Machine info from setup.machine object ──
-        try:
-            machine_obj = setup.machine
-            if machine_obj:
-                machine_info = {}
-                try:
-                    machine_info["description"] = machine_obj.description
-                except Exception:
-                    pass
-                try:
-                    machine_info["vendor"] = machine_obj.vendor
-                except Exception:
-                    pass
-                try:
-                    if machine_obj.model:
-                        machine_info["model"] = machine_obj.model
-                except Exception:
-                    pass
-                try:
-                    machine_info["id"] = machine_obj.id
-                except Exception:
-                    pass
-                try:
-                    url_obj = machine_obj.postURL
-                    if url_obj:
-                        try:
-                            machine_info["postURL"] = url_obj.toString()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+        machine_obj = _safe_attr(setup, "machine")
+        if machine_obj:
+            machine_info = {
+                k: v for k, v in {
+                    "description": _safe_attr(machine_obj, "description"),
+                    "vendor": _safe_attr(machine_obj, "vendor"),
+                    "model": _safe_attr(machine_obj, "model"),
+                    "id": _safe_attr(machine_obj, "id"),
+                }.items() if v is not None
+            }
 
-                try:
-                    spindle_info = _read_machine_spindle(machine_obj)
-                    if spindle_info:
-                        machine_info["spindle"] = spindle_info
-                except Exception:
-                    pass
+            url_obj = _safe_attr(machine_obj, "postURL")
+            if url_obj:
+                url_str = _safe_attr(url_obj, "toString")
+                if callable(url_str):
+                    try:
+                        machine_info["postURL"] = url_str()
+                    except Exception:
+                        pass
 
-                if machine_info:
-                    setup_info["machine"] = machine_info
-        except Exception:
-            pass
+            spindle_info = _read_machine_spindle(machine_obj)
+            if spindle_info:
+                machine_info["spindle"] = spindle_info
+
+            if machine_info:
+                setup_info["machine"] = machine_info
 
         # ── Read setup parameters using targeted lookups ──
-        try:
-            setup_params = setup.parameters
-
+        setup_params = _safe_attr(setup, "parameters")
+        if setup_params:
             machine_params = {}
             for mname in _MACHINE_PARAM_NAMES:
                 val = _read_param(setup_params, mname)
                 if val is not None and not _is_proxy_str(val):
                     machine_params[mname] = val
+
+            known_setup_params = set(_MACHINE_PARAM_NAMES) | set(_STOCK_PARAM_NAMES)
+            for p in _safe_iter(setup_params):
+                name = p.name
+                if name.startswith(("job_machine", "machine_")) and name not in known_setup_params:
+                    val = _safe_param_value(p)
+                    if val is not None and not _is_proxy_str(val):
+                        machine_params[name] = val
+
             if machine_params:
                 if "machine" not in setup_info:
                     setup_info["machine"] = {}
                 setup_info["machine"]["parameters"] = machine_params
-
-            # Enumerate ALL setup parameters to catch machine params we don't know about
-            try:
-                known_setup_params = set(_MACHINE_PARAM_NAMES) | set(_STOCK_PARAM_NAMES)
-                extra_machine = {}
-                for i in range(setup_params.count):
-                    p = setup_params.item(i)
-                    name = p.name
-                    if name.startswith(("job_machine", "machine_")) and name not in known_setup_params:
-                        val = _safe_param_value(p)
-                        if val is not None and not _is_proxy_str(val):
-                            extra_machine[name] = val
-                if extra_machine:
-                    if "machine" not in setup_info:
-                        setup_info["machine"] = {}
-                    if "parameters" not in setup_info["machine"]:
-                        setup_info["machine"]["parameters"] = {}
-                    setup_info["machine"]["parameters"].update(extra_machine)
-            except Exception:
-                pass
 
             stock_info = {}
             for sname in _STOCK_PARAM_NAMES:
@@ -114,62 +83,41 @@ def run(params):
             if stock_info:
                 setup_info["stock"] = stock_info
 
-            try:
-                origin = setup_params.itemByName("wcs_origin_boxPoint")
-                if origin:
-                    val = origin.value
-                    if hasattr(val, "value"):
-                        val = val.value
-                    setup_info["wcsOrigin"] = str(val) if val else None
-            except Exception:
-                pass
-
-        except Exception:
-            pass
+            origin = _read_param(setup_params, "wcs_origin_boxPoint")
+            if origin is not None:
+                setup_info["wcsOrigin"] = str(origin)
 
         # ── Model bodies with physical materials ──
-        try:
-            models = setup.models
-            if models and models.count > 0:
-                model_info = []
-                for i in range(models.count):
-                    body = models.item(i)
-                    body_data = {}
+        models = _safe_attr(setup, "models")
+        if models:
+            model_info = []
+            for body in _safe_iter(models):
+                body_data = {}
+                name = _safe_attr(body, "name")
+                if name:
+                    body_data["name"] = name
 
-                    if hasattr(body, "name"):
-                        body_data["name"] = body.name
+                mat = _safe_attr(body, "material")
+                if mat:
+                    body_data["material"] = _safe_attr(mat, "name")
+                    mat_lib = _safe_attr(mat, "materialLibrary")
+                    if mat_lib:
+                        body_data["materialLibrary"] = _safe_attr(mat_lib, "name")
 
-                    try:
-                        mat = body.material
-                        if mat:
-                            body_data["material"] = mat.name
-                            try:
-                                body_data["materialLibrary"] = mat.materialLibrary.name
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
+                if "material" not in body_data:
+                    comp = _safe_attr(body, "parentComponent")
+                    comp_mat = _safe_attr(comp, "material") if comp else None
+                    if comp_mat:
+                        body_data["material"] = _safe_attr(comp_mat, "name")
+                        comp_mat_lib = _safe_attr(comp_mat, "materialLibrary")
+                        if comp_mat_lib:
+                            body_data["materialLibrary"] = _safe_attr(comp_mat_lib, "name")
 
-                    if "material" not in body_data:
-                        try:
-                            if hasattr(body, "parentComponent"):
-                                comp = body.parentComponent
-                                if comp and comp.material:
-                                    body_data["material"] = comp.material.name
-                                    try:
-                                        body_data["materialLibrary"] = comp.material.materialLibrary.name
-                                    except Exception:
-                                        pass
-                        except Exception:
-                            pass
+                if body_data:
+                    model_info.append(body_data)
 
-                    if body_data:
-                        model_info.append(body_data)
-
-                if model_info:
-                    setup_info["models"] = model_info
-        except Exception:
-            pass
+            if model_info:
+                setup_info["models"] = model_info
 
         setups.append(setup_info)
 

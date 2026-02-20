@@ -50,17 +50,14 @@ def run(params):
     warnings = []
 
     machine_desc = "unknown"
-    machine_obj = None
-    try:
-        machine_obj = setup.machine
-        if machine_obj:
-            machine_desc = (
-                f"{machine_obj.vendor} {machine_obj.model}"
-                if machine_obj.vendor
-                else (machine_obj.description or "unknown")
-            )
-    except Exception:
-        pass
+    machine_obj = _safe_attr(setup, "machine")
+    if machine_obj:
+        vendor = _safe_attr(machine_obj, "vendor")
+        model = _safe_attr(machine_obj, "model")
+        machine_desc = (
+            f"{vendor} {model}" if vendor
+            else (_safe_attr(machine_obj, "description") or "unknown")
+        )
 
     # Split updates into setup-param writes vs spindle writes
     setup_updates = {}
@@ -103,7 +100,9 @@ def run(params):
                 warnings.append(err_msg or f"Failed to write '{pname}'")
         adsk.doEvents()
         after = _capture_param_snapshot(setup_params, setup_updates.keys())
-        changes.extend(_build_diff(before, after, MACHINE_WRITABLE_PARAMS))
+        changes.extend(
+            _build_diff(before, after, params_obj=setup_params, label_map=MACHINE_WRITABLE_PARAMS)
+        )
 
     # ── Handle spindle writes ──
     if spindle_updates:
