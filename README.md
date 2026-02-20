@@ -51,50 +51,87 @@ Two components:
 
 All write tools return a before/after diff showing exactly what changed.
 
+## Prerequisites
+
+You need two things installed before setting up the MCP server:
+
+1. **Fusion 360** -- [Download from Autodesk](https://www.autodesk.com/products/fusion-360/overview)
+2. **Claude Desktop** (free) -- [Download from Anthropic](https://claude.ai/download)
+
+No Python installation required -- the MCP server ships as a standalone binary.
+
 ## Setup
 
-### 1. Clone and install Python dependencies
+### 1. Run the install script
 
-The MCP server needs `mcp` and `pydantic`. The Fusion add-in has zero external dependencies.
+The install script downloads the correct binary for your platform, configures Claude Desktop (or Cursor), and extracts the Fusion 360 add-in -- all in one step.
 
-**With uv (recommended):**
-
-```bash
-git clone <repo-url> fusion-cam-mcp
-cd fusion-cam-mcp
-uv venv .venv
-uv pip install -r requirements.txt
-```
-
-**With plain venv:**
+**macOS (Terminal):**
 
 ```bash
-git clone <repo-url> fusion-cam-mcp
-cd fusion-cam-mcp
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+curl -fsSL https://raw.githubusercontent.com/BJam/fusion-cam-mcp/main/install.sh | bash
 ```
 
-### 2. Install and start the Fusion MCP Bridge
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/BJam/fusion-cam-mcp/main/install.ps1 | iex
+```
+
+The script will prompt you to choose:
+- **Mode**: read-only (recommended), full (write), or both
+- **Target**: Claude Desktop (recommended), Cursor, or both
+
+Existing MCP configs are merged -- the script won't overwrite your other servers.
+
+> **macOS Gatekeeper note:** The install script automatically clears the quarantine flag on the downloaded binary. If macOS still blocks it, right-click the binary and select "Open", or run: `xattr -d com.apple.quarantine ~/fusion-cam-mcp/fusion-cam-mcp`
+
+### 2. Install the Fusion MCP Bridge add-in
+
+This step is done inside Fusion 360 and is the same on macOS and Windows.
 
 1. Open Fusion 360
 2. Go to **UTILITIES > ADD-INS** (or press `Shift+S`)
 3. In the **Add-Ins** tab, click the green **+** button next to "My Add-Ins"
-4. Navigate to the `fusion-mcp-bridge` folder inside this repo and click **Open**
+4. Navigate to the `fusion-mcp-bridge` folder that the installer extracted (printed at the end of step 1, typically `~/fusion-cam-mcp/fusion-mcp-bridge/`) and click **Open**
 5. Select `fusion-mcp-bridge` in the list and click **Run**
+6. (Optional) Check **Run on Startup** so it starts automatically with Fusion
 
-The bridge will appear in your Add-Ins list and begin listening on `localhost:9876`. Check "Run on Startup" if you want it to start automatically with Fusion.
+The bridge will begin listening on `localhost:9876`.
 
-### 3. Configure Cursor MCP
+### 3. Restart Claude Desktop
 
-Add one of the following to your Cursor MCP settings (`.cursor/mcp.json` or global settings), then replace `/absolute/path/to/fusion-cam-mcp` with the actual path to this repo:
+Close and reopen Claude Desktop so it picks up the new MCP configuration. You should see the Fusion 360 CAM tools available in the tools menu (hammer icon).
 
-**Read-only mode (default, safe for exploration):**
+### Alternative: Manual / Developer Setup
+
+<details>
+<summary>For contributors or if you prefer to run from source.</summary>
+
+#### Clone and install Python dependencies
+
+Requires Python 3.10+. The Fusion add-in has zero external dependencies.
+
+```bash
+git clone https://github.com/BJam/fusion-cam-mcp.git
+cd fusion-cam-mcp
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt    # macOS/Linux
+# .venv\Scripts\pip install -r requirements.txt  # Windows
+```
+
+#### Configure Claude Desktop
+
+Add the following to your Claude Desktop config file, replacing the paths with the actual location of this repo:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
-    "fusion360-cam-mcp-read-only": {
+    "fusion360-cam-mcp": {
       "command": "/absolute/path/to/fusion-cam-mcp/.venv/bin/python",
       "args": [
         "/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py"
@@ -104,21 +141,19 @@ Add one of the following to your Cursor MCP settings (`.cursor/mcp.json` or glob
 }
 ```
 
-**Full mode (enables write operations):**
+To enable write operations, add `"--mode", "full"` to the args array.
 
-```json
-{
-  "mcpServers": {
-    "fusion360-cam-mcp-full": {
-      "command": "/absolute/path/to/fusion-cam-mcp/.venv/bin/python",
-      "args": [
-        "/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py",
-        "--mode", "full"
-      ]
-    }
-  }
-}
+Or run the self-installer from source to auto-configure:
+
+```bash
+.venv/bin/python fusion-cam-mcp-server/server.py --install
 ```
+
+#### Configure Cursor (optional)
+
+Add the same `mcpServers` block to `.cursor/mcp.json` in the project root, or to your global Cursor MCP settings.
+
+</details>
 
 ## Usage Examples
 
@@ -174,6 +209,9 @@ These are reasonable defaults for many machines. Your actual cycle times will va
 
 ```
 fusion-cam-mcp/
+  install.sh                     # One-line installer for macOS
+  install.ps1                    # One-line installer for Windows
+  fusion-cam-mcp.spec            # PyInstaller build spec
   LICENSE
   README.md
   CHANGELOG.md
@@ -182,12 +220,15 @@ fusion-cam-mcp/
   requirements.txt               # MCP server dependencies (mcp, pydantic)
   .gitignore
   .github/
+    workflows/
+      release.yml                # CI: build binaries on tag push
     pull_request_template.md
     ISSUE_TEMPLATE/
       bug_report.md
       feature_request.md
   fusion-cam-mcp-server/
     server.py                    # MCP server entry point (FastMCP, stdio)
+    installer.py                 # --install: self-configure MCP + extract add-in
     fusion_client.py             # TCP client to communicate with add-in
     queries/
       __init__.py                # Query loader (caches scripts, prepends helpers)

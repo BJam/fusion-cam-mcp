@@ -7,8 +7,12 @@ edit the script file and restart the MCP server (no Fusion addin restart needed)
 """
 
 import os
+import sys
 
-_QUERIES_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    _QUERIES_DIR = os.path.join(sys._MEIPASS, "queries")
+else:
+    _QUERIES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Cache: script name -> combined code string (helpers + query)
 _cache: dict[str, str] = {}
