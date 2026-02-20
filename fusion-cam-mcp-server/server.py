@@ -673,4 +673,8 @@ def update_setup_machine_params(
 # ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    mcp.run()
+    if "--install" in sys.argv:
+        from installer import run_install
+        run_install()
+    else:
+        mcp.run()

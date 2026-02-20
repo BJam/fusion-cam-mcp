@@ -70,17 +70,16 @@ def run(params):
 
     # Get the post configuration from the setup's machine
     post_url_str = None
-    try:
-        machine = setup.machine
-        if machine:
-            url_obj = machine.postURL
-            if url_obj:
+    machine = _safe_attr(setup, "machine")
+    if machine:
+        url_obj = _safe_attr(machine, "postURL")
+        if url_obj:
+            to_string = _safe_attr(url_obj, "toString")
+            if callable(to_string):
                 try:
-                    post_url_str = url_obj.toString()
+                    post_url_str = to_string()
                 except Exception:
                     pass
-    except Exception:
-        pass
 
     # Resolve the post URL to a local .cps file path
     post_config = _resolve_post_config(cam, post_url_str)
@@ -146,18 +145,10 @@ def _resolve_post_config(cam, post_url_str):
     cps_name = post_url_str.split("://")[-1] if "://" in post_url_str else post_url_str
 
     search_folders = []
-    try:
-        pf = cam.personalPostFolder
+    for attr in ("personalPostFolder", "postFolder"):
+        pf = _safe_attr(cam, attr)
         if pf:
             search_folders.append(pf)
-    except Exception:
-        pass
-    try:
-        pf = cam.postFolder
-        if pf:
-            search_folders.append(pf)
-    except Exception:
-        pass
 
     for folder in search_folders:
         candidate = os.path.join(folder, cps_name)

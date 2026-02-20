@@ -44,7 +44,6 @@ def run(params):
     op_params = op.parameters
     warnings = []
 
-    # Validate parameter names -- only allow known writable params
     valid_updates = {}
     for pname, pval in updates.items():
         if pname in WRITABLE_OPERATION_PARAMS:
@@ -62,10 +61,8 @@ def run(params):
             "warnings": warnings,
         }
 
-    # Snapshot BEFORE state for all params we intend to change
     before = _capture_param_snapshot(op_params, valid_updates.keys())
 
-    # Apply changes
     applied = 0
     skipped = 0
     for pname, expression in valid_updates.items():
@@ -78,11 +75,8 @@ def run(params):
 
     adsk.doEvents()
 
-    # Snapshot AFTER state
     after = _capture_param_snapshot(op_params, valid_updates.keys())
-
-    label_map = WRITABLE_OPERATION_PARAMS
-    changes = _build_diff(before, after, label_map)
+    changes = _build_diff(before, after, params_obj=op_params)
 
     result = {
         "target": operation_name,

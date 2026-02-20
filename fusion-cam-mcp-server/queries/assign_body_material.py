@@ -13,6 +13,18 @@
 # Result: dict with body, before/after material info
 # ──────────────────────────────────────────────────────────────────────
 
+def _material_snapshot(body):
+    """Capture current material info from a body."""
+    info = {"material": None, "library": None}
+    mat = _safe_attr(body, "material")
+    if mat:
+        info["material"] = _safe_attr(mat, "name")
+        mat_lib = _safe_attr(mat, "materialLibrary")
+        if mat_lib:
+            info["library"] = _safe_attr(mat_lib, "name")
+    return info
+
+
 def run(params):
     dialog_err = _check_no_active_command()
     if dialog_err:
@@ -39,32 +51,11 @@ def run(params):
     if err:
         return err
 
-    # Capture before state
-    before_info = {"material": None, "library": None}
-    try:
-        if body.material:
-            before_info["material"] = body.material.name
-            try:
-                before_info["library"] = body.material.materialLibrary.name
-            except Exception:
-                pass
-    except Exception:
-        pass
+    before_info = _material_snapshot(body)
 
     try:
         body.material = target_mat
         adsk.doEvents()
-
-        after_info = {"material": None, "library": None}
-        try:
-            if body.material:
-                after_info["material"] = body.material.name
-                try:
-                    after_info["library"] = body.material.materialLibrary.name
-                except Exception:
-                    pass
-        except Exception:
-            pass
 
         return {
             "target": body_name,
@@ -73,7 +64,7 @@ def run(params):
                 "parameter": "material",
                 "label": "Physical Material",
                 "before": before_info,
-                "after": after_info,
+                "after": _material_snapshot(body),
             }],
             "changesApplied": 1,
             "changesSkipped": 0,

@@ -28,9 +28,9 @@ def run(params):
     op_params = op.parameters
     all_parameters = {}
 
-    for category, param_map in ALL_PARAM_CATEGORIES.items():
+    for category, param_set in ALL_PARAM_CATEGORIES.items():
         cat_data = {}
-        for key, label in param_map.items():
+        for key in param_set:
             try:
                 p = op_params.itemByName(key)
                 if p is None:
@@ -38,89 +38,85 @@ def run(params):
                 val = _safe_param_value(p)
                 if val is None:
                     continue
-                entry = {"label": label, "value": val}
-                try:
-                    if not p.isEnabled:
-                        entry["isEnabled"] = False
-                except Exception:
-                    pass
-                try:
-                    if not p.isEditable:
-                        entry["isEditable"] = False
-                except Exception:
-                    pass
+                entry = {"label": _param_label(p), "value": val}
+                enabled = _safe_attr(p, "isEnabled")
+                if enabled is not None and not enabled:
+                    entry["isEnabled"] = False
+                editable = _safe_attr(p, "isEditable")
+                if editable is not None and not editable:
+                    entry["isEditable"] = False
                 cat_data[key] = entry
             except Exception:
                 pass
         if cat_data:
             all_parameters[category] = cat_data
 
-    # Also read uncategorized parameters, but only visible/enabled ones
-    try:
-        extra_params = {}
-        for i in range(op_params.count):
-            param = op_params.item(i)
-            name = param.name
-            if name in ALL_KNOWN_PARAMS:
-                continue
-            try:
-                if not param.isVisible:
-                    continue
-            except Exception:
-                pass
-            val = _safe_param_value(param)
-            if val is not None:
-                extra_params[name] = val
-        if extra_params:
-            all_parameters["other"] = extra_params
-    except Exception:
-        pass
+    # Auto-categorize parameters not in the explicit sets
+    for p in _safe_iter(op_params):
+        name = p.name
+        if name in ALL_KNOWN_PARAMS:
+            continue
+        visible = _safe_attr(p, "isVisible")
+        if visible is not None and not visible:
+            continue
+        val = _safe_param_value(p)
+        if val is not None:
+            cat = _categorize_param(name)
+            all_parameters.setdefault(cat, {})[name] = val
 
     details["parameters"] = all_parameters
 
-    # Computed metrics for AI analysis
+    # Computed metrics using UnitsManager.convert() for all unit math.
     computed = {}
     try:
-        tool_info = details.get("tool", {})
-        feeds = details.get("feedsAndSpeeds", {})
+        um = cam.unitsManager
 
-        diameter = tool_info.get("tool_diameter")
-        flutes = tool_info.get("tool_numberOfFlutes")
+        def _raw(param_set, name):
+            """Read raw internal .value from a parameter set."""
+            try:
+                p = param_set.itemByName(name)
+                if p is None:
+                    return None
+                v = p.value
+                return v.value if hasattr(v, "value") else v
+            except Exception:
+                return None
 
-        rpm_data = feeds.get("tool_spindleSpeed")
-        rpm = rpm_data.get("value") if isinstance(rpm_data, dict) else rpm_data
+        tool_obj = op.tool
+        diameter_cm = _raw(tool_obj.parameters, "tool_diameter") if tool_obj else None
+        flutes = _raw(tool_obj.parameters, "tool_numberOfFlutes") if tool_obj else None
+        rpm = _raw(op_params, "tool_spindleSpeed")
+        feed_mm_min = _raw(op_params, "tool_feedCutting")
 
-        feed_data = feeds.get("tool_feedCutting")
-        feed = feed_data.get("value") if isinstance(feed_data, dict) else feed_data
-
-        if diameter and rpm:
-            surface_speed_cm_per_min = math.pi * diameter * rpm
+        if diameter_cm and rpm:
+            diameter_mm = um.convert(diameter_cm, "cm", "mm")
+            ss_m_min = math.pi * diameter_mm * rpm / 1000
             computed["surfaceSpeed"] = {
-                "value": round(surface_speed_cm_per_min / 100, 2),
+                "value": round(ss_m_min, 2),
                 "unit": "m/min",
             }
+            ss_ft_min = um.convert(ss_m_min, "m/min", "ft/min")
             computed["surfaceSpeedImperial"] = {
-                "value": round(surface_speed_cm_per_min / 100 * 3.28084, 2),
+                "value": round(ss_ft_min, 2),
                 "unit": "ft/min",
             }
 
-        if feed and rpm and flutes and flutes > 0:
-            chip_load_cm = feed / (rpm * flutes)
+        if feed_mm_min and rpm and flutes and flutes > 0:
+            chip_load_mm = feed_mm_min / (rpm * flutes)
             computed["chipLoad"] = {
-                "value": round(chip_load_cm * 10, 4),
-                "unit": "mm",
+                "value": round(chip_load_mm, 4),
+                "unit": "mm/tooth",
             }
+            chip_load_in = um.convert(chip_load_mm, "mm", "in")
             computed["chipLoadImperial"] = {
-                "value": round(chip_load_cm / 2.54, 5),
-                "unit": "in",
+                "value": round(chip_load_in, 5),
+                "unit": "in/tooth",
             }
 
-        if diameter:
-            stepover_data = details.get("engagement", {}).get("stepover")
-            if stepover_data:
-                stepover = stepover_data.get("value") if isinstance(stepover_data, dict) else stepover_data
-                if stepover and diameter > 0:
-                    computed["stepoverRatio"] = round(stepover / diameter, 3)
+        if diameter_cm:
+            stepover_cm = _raw(op_params, "stepover")
+            if stepover_cm and diameter_cm > 0:
+                computed["stepoverRatio"] = round(stepover_cm / diameter_cm, 3)
 
     except Exception:
         pass

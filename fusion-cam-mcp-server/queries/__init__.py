@@ -2,13 +2,20 @@
 Query script loader for the Fusion 360 CAM MCP server.
 
 Loads Python query scripts from this directory and prepends shared helpers.
+Helper modules are any files matching `_*.py` (sorted alphabetically),
+which ensures correct dependency order (_1_base before _2_params, etc.).
+
 Scripts are cached in memory after first load. To iterate on query logic,
 edit the script file and restart the MCP server (no Fusion addin restart needed).
 """
 
 import os
+import sys
 
-_QUERIES_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    _QUERIES_DIR = os.path.join(sys._MEIPASS, "queries")
+else:
+    _QUERIES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Cache: script name -> combined code string (helpers + query)
 _cache: dict[str, str] = {}
@@ -25,10 +32,14 @@ def _read_file(filename: str) -> str:
 
 
 def _get_helpers() -> str:
-    """Load and cache the shared helpers code."""
+    """Load and cache the shared helpers code from all _*.py files."""
     global _helpers_code
     if _helpers_code is None:
-        _helpers_code = _read_file("_helpers.py")
+        helper_files = sorted(
+            f for f in os.listdir(_QUERIES_DIR)
+            if f.startswith("_") and f.endswith(".py") and f != "__init__.py"
+        )
+        _helpers_code = "\n\n".join(_read_file(f) for f in helper_files)
     return _helpers_code
 
 

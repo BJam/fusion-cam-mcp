@@ -1,0 +1,74 @@
+name: Build & Release
+
+on:
+  push:
+    # TODO: revert to tags-only once testing is complete
+    # tags:
+    #   - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+            artifact: fusion-cam-mcp-darwin-arm64
+          - os: macos-15-intel
+            arch: x64
+            artifact: fusion-cam-mcp-darwin-x64
+          - os: windows-latest
+            arch: x64
+            artifact: fusion-cam-mcp-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build binary
+        run: pyinstaller fusion-cam-mcp.spec
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            mv dist/fusion-cam-mcp.exe "dist/${{ matrix.artifact }}"
+          else
+            mv dist/fusion-cam-mcp "dist/${{ matrix.artifact }}"
+          fi
+
+      - name: Strip quarantine metadata (macOS)
+        if: runner.os == 'macOS'
+        run: xattr -cr "dist/${{ matrix.artifact }}" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*
