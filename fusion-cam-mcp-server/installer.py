@@ -21,12 +21,9 @@ import tempfile
 # ── Version ───────────────────────────────────────────────────────────
 
 def _get_version() -> str:
-    """Read __version__ from server.py at import time, or fall back to 'unknown'."""
-    try:
-        from server import __version__
-        return __version__
-    except Exception:
-        return "unknown"
+    """Read __version__ from the already-running main module."""
+    main = sys.modules.get("__main__")
+    return getattr(main, "__version__", "unknown")
 
 
 # ── Path helpers ──────────────────────────────────────────────────────

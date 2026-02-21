@@ -31,6 +31,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Stamp version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i.bak "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" fusion-cam-mcp-server/server.py
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" fusion-mcp-bridge/fusion-mcp-bridge.manifest
+          rm -f fusion-cam-mcp-server/server.py.bak pyproject.toml.bak fusion-mcp-bridge/fusion-mcp-bridge.manifest.bak
+          echo "Stamped version: $VERSION"
+
       - name: Install dependencies
         run: |
           pip install pyinstaller
