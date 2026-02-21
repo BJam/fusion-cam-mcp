@@ -81,7 +81,7 @@ main() {
 
     echo ""
     echo "── Running installer ──"
-    "$BINARY" --install
+    "$BINARY" --install < /dev/tty
 }
 
 main
