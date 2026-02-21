@@ -45,7 +45,10 @@ def run(params):
     if err:
         return err
 
-    design = doc.products.itemByProductType("DesignProductType")
+    try:
+        design = doc.products.itemByProductType("DesignProductType")
+    except RuntimeError:
+        design = None
     if not design:
         return {"success": False, "error": "No Design workspace found"}
     design = adsk.fusion.Design.cast(design)

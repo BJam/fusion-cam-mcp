@@ -37,7 +37,10 @@ def _get_cam(document_name=None):
     if err:
         return None, err
 
-    cam_product = doc.products.itemByProductType(CAM_PRODUCT_TYPE)
+    try:
+        cam_product = doc.products.itemByProductType(CAM_PRODUCT_TYPE)
+    except RuntimeError:
+        cam_product = None
     if not cam_product:
         return None, {
             "success": False,
@@ -152,7 +155,10 @@ def _find_body_by_name(document_name=None, body_name=None, setup_name=None):
     doc, err = _get_document(document_name)
     if err:
         return None, err
-    design = doc.products.itemByProductType("DesignProductType")
+    try:
+        design = doc.products.itemByProductType("DesignProductType")
+    except RuntimeError:
+        design = None
     if not design:
         return None, {"success": False, "error": "No Design workspace found in document."}
     design = adsk.fusion.Design.cast(design)
