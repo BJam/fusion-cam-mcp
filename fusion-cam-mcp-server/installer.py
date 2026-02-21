@@ -242,8 +242,7 @@ def _build_server_entry(binary_path: str, mode: str) -> dict:
         python_path = sys.executable
         entry = {"command": python_path, "args": [binary_path]}
 
-    if mode == "full":
-        entry["args"].extend(["--mode", "full"])
+    entry["args"].extend(["--mode", "full" if mode == "full" else "read-only"])
 
     return entry
 
