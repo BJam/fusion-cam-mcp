@@ -10,8 +10,11 @@ Supports both **read-only** (default) and **full** mode with write capabilities 
 
 ## Architecture
 
-```
-Cursor / Claude  --MCP (stdio)-->  MCP Server (Python)  --TCP-->  Fusion 360 Add-in  --adsk.cam API-->  Fusion 360
+```mermaid
+flowchart LR
+    Cursor/Claude -->|"MCP (stdio)"| MCP_Server
+    MCP_Server -->|TCP| Fusion_Bridge
+    Fusion_Bridge -->|"adsk.cam API"| Fusion_360
 ```
 
 Two components:
@@ -205,57 +208,6 @@ The `get_machining_time` tool uses these default assumptions when estimating cyc
 
 These are reasonable defaults for many machines. Your actual cycle times will vary based on your machine's rapid rates and tool changer speed.
 
-## Project Structure
-
-```
-fusion-cam-mcp/
-  install.sh                     # One-line installer for macOS
-  install.ps1                    # One-line installer for Windows
-  fusion-cam-mcp.spec            # PyInstaller build spec
-  LICENSE
-  README.md
-  CHANGELOG.md
-  CONTRIBUTING.md
-  pyproject.toml                 # Python packaging configuration
-  requirements.txt               # MCP server dependencies (mcp, pydantic)
-  .gitignore
-  .github/
-    workflows/
-      release.yml                # CI: build binaries on tag push
-    pull_request_template.md
-    ISSUE_TEMPLATE/
-      bug_report.md
-      feature_request.md
-  fusion-cam-mcp-server/
-    server.py                    # MCP server entry point (FastMCP, stdio)
-    installer.py                 # --install: self-configure MCP + extract add-in
-    fusion_client.py             # TCP client to communicate with add-in
-    queries/
-      __init__.py                # Query loader (caches scripts, prepends helpers)
-      _helpers.py                # Shared constants, parameter maps, utility functions
-      get_document_info.py       # Document name, units, CAM counts
-      list_documents.py          # All open documents with CAM summary
-      get_setups.py              # Setups with machine/stock/material info
-      get_operations.py          # Operations with feeds, speeds, tools, coolant, notes
-      get_operation_details.py   # Full parameter dump + computed metrics
-      get_tools.py               # Tool inventory with holder info
-      get_machining_time.py      # Cycle time estimates
-      get_toolpath_status.py     # Toolpath generation status
-      get_nc_programs.py         # NC programs with post-processor config
-      generate_toolpaths.py      # Trigger toolpath generation
-      post_process.py            # Post-process to NC/G-code output
-      list_material_libraries.py # Browse material libraries
-      get_material_properties.py # Read material properties
-      update_operation_params.py # Write: update feeds/speeds/engagement
-      update_setup_machine_params.py # Write: update machine parameters
-      assign_body_material.py    # Write: assign material to body
-      create_custom_material.py  # Write: create custom material from copy
-  fusion-mcp-bridge/
-    fusion-mcp-bridge.py         # Add-in entry point (run/stop)
-    fusion-mcp-bridge.manifest   # Fusion add-in manifest
-    executor.py                  # Generic Python script executor (exec engine)
-    tcp_server.py                # TCP listener + JSON framing
-```
 
 ## How It Works
 
