@@ -167,14 +167,15 @@ Add the following to your Claude Desktop config file, replacing the paths with t
     "fusion360-cam-mcp": {
       "command": "/absolute/path/to/fusion-cam-mcp/.venv/bin/python",
       "args": [
-        "/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py"
+        "/absolute/path/to/fusion-cam-mcp/fusion-cam-mcp-server/server.py",
+        "--mode", "read-only"
       ]
     }
   }
 }
 ```
 
-To enable write operations, add `"--mode", "full"` to the args array.
+To enable write operations, change `"read-only"` to `"full"`.
 
 Or run the self-installer from source to auto-configure:
 
@@ -215,7 +216,7 @@ The default TCP port is `9876`. Override it by setting the `FUSION_CAM_MCP_PORT`
   "mcpServers": {
     "fusion360-cam": {
       "command": "/path/to/.venv/bin/python",
-      "args": ["/path/to/fusion-cam-mcp-server/server.py"],
+      "args": ["/path/to/fusion-cam-mcp-server/server.py", "--mode", "read-only"],
       "env": {
         "FUSION_CAM_MCP_PORT": "9877"
       }
