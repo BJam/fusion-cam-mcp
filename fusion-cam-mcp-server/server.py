@@ -719,11 +719,23 @@ def update_setup_machine_params(
 if __name__ == "__main__":
     if "--install" in sys.argv:
         from installer import run_install
-        run_install()
+        try:
+            run_install()
+        except Exception as e:
+            print(f"\n  ERROR: Install failed: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
         sys.exit(0)
     elif "--uninstall" in sys.argv:
         from installer import run_uninstall
-        run_uninstall()
+        try:
+            run_uninstall()
+        except Exception as e:
+            print(f"\n  ERROR: Uninstall failed: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
         sys.exit(0)
     else:
         mcp.run()

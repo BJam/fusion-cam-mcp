@@ -59,7 +59,7 @@ All write tools return a before/after diff showing exactly what changed.
 You need two things installed before setting up the MCP server:
 
 1. **Fusion 360** -- [Download from Autodesk](https://www.autodesk.com/products/fusion-360/overview)
-2. **Claude Desktop** (free) -- [Download from Anthropic](https://claude.ai/download)
+2. **An MCP client** -- [Claude Desktop](https://claude.ai/download) (free) or [Cursor](https://cursor.com)
 
 No Python installation required -- the MCP server ships as a standalone binary.
 
@@ -93,7 +93,7 @@ Existing MCP configs are merged -- the script won't overwrite your other servers
 
 > **Windows execution policy note:** If `irm | iex` is blocked, run this first: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
-### 2. Install the Fusion MCP Bridge add-in
+### 2. Run the Fusion MCP Bridge add-in
 
 The installer places the add-in in Fusion 360's standard AddIns directory, so it's auto-discovered.
 
@@ -106,7 +106,7 @@ The bridge will begin listening on `localhost:9876`.
 
 ### 3. Restart your MCP client
 
-Close and reopen Claude Desktop and/or Cursor so it picks up the new MCP configuration. In Claude Desktop, you should see the Fusion 360 CAM tools in the tools menu (hammer icon). In Cursor, the MCP server will appear in your MCP settings.
+Close and reopen Claude Desktop and/or Cursor so it picks up the new MCP configuration. In Claude Desktop, you should see the MCP running in Settings -> Developer -> Local MCP servers. In Cursor, the MCP server will appear in your MCP settings.
 
 ### Alternative: Manual / Developer Setup
 
@@ -124,6 +124,19 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt    # macOS/Linux
 # .venv\Scripts\pip install -r requirements.txt  # Windows
 ```
+
+#### Install the Fusion MCP Bridge add-in
+
+When running from source, the add-in lives in the repo's `fusion-mcp-bridge/` directory. You need to point Fusion 360 to it manually:
+
+1. Open Fusion 360
+2. Go to **UTILITIES > ADD-INS** (or press `Shift+S`)
+3. In the **Add-Ins** tab, click the green **+** button next to "My Add-Ins"
+4. Navigate to the `fusion-mcp-bridge` folder inside your cloned repo and click **Open**
+5. Select **fusion-mcp-bridge** in the list and click **Run**
+6. (Optional) Check **Run on Startup** so it starts automatically with Fusion
+
+Unlike the binary installer (which copies the add-in into Fusion's standard AddIns directory for auto-discovery), the dev setup points Fusion directly at the repo directory. This means changes to the bridge code take effect immediately on restart.
 
 #### Configure Claude Desktop
 
@@ -156,7 +169,7 @@ Or run the self-installer from source to auto-configure:
 
 #### Configure Cursor (optional)
 
-Add the same `mcpServers` block to `.cursor/mcp.json` in the project root, or to your global Cursor MCP settings.
+Add the same `mcpServers` block to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` in the project root.
 
 </details>
 
