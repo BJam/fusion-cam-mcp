@@ -1,5 +1,7 @@
 # Fusion 360 CAM MCP Server
 
+> **WARNING: This project is a work in progress.** APIs, tools, and behavior may change without notice. The installer modifies your MCP configuration files (e.g. `~/.cursor/mcp.json`, `claude_desktop_config.json`) to register this server. In full mode, AI assistants can write data directly to your Fusion 360 document — including feeds, speeds, and machining parameters. Incorrect changes could affect real toolpaths and G-code output. Use at your own risk!
+
 An MCP server that exposes Fusion 360 CAM/manufacturing data to AI assistants (Cursor, Claude, etc.). Query setups, operations, tools, feeds & speeds, machining times, and toolpath status -- then get AI-powered analysis of your CNC machining parameters.
 
 Supports both **read-only** (default) and **full** mode with write capabilities for updating feeds/speeds, assigning materials, and modifying machine parameters.
@@ -17,6 +19,8 @@ flowchart LR
     Fusion_Bridge -->|"adsk.cam API"| Fusion_360
 ```
 
+
+
 Two components:
 
 - **MCP Server** (`fusion-cam-mcp-server/`) -- standalone Python process that Cursor launches via stdio. Connects to the add-in over TCP.
@@ -26,31 +30,35 @@ Two components:
 
 ### Read Tools
 
-| Tool | Description |
-|------|-------------|
-| `ping` | Health check -- verify the add-in connection is alive |
-| `list_documents` | List all open Fusion 360 documents with CAM summary info |
-| `get_document_info` | Active document name, units, CAM setup/operation counts |
-| `get_setups` | All setups: name, type, machine info, stock dimensions, body materials |
-| `get_operations` | Operations with type, strategy, tool info, feeds, speeds, coolant, notes, stepover/stepdown |
-| `get_operation_details` | Full parameter dump organized by category (feeds, speeds, engagement, linking, drilling, passes, heights, strategy) + computed metrics (chip load, surface speed, stepover ratio) |
-| `get_tools` | All tools in use: type, diameter, flute count, lengths, holder info, which operations use them |
-| `get_machining_time` | Estimated cycle time per setup/operation |
-| `get_toolpath_status` | Which toolpaths are generated, valid, outdated, or have warnings |
-| `get_nc_programs` | List all NC programs with their operations, post-processor config, and output settings |
-| `list_material_libraries` | Browse available material libraries and their materials |
-| `get_material_properties` | Read all physical/mechanical properties of a specific material |
-| `generate_toolpaths` | Trigger toolpath generation for specific operations or entire setups |
-| `post_process` | Post-process a setup to generate NC/G-code files using the configured post processor |
+
+| Tool                      | Description                                                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ping`                    | Health check -- verify the add-in connection is alive                                                                                                                             |
+| `list_documents`          | List all open Fusion 360 documents with CAM summary info                                                                                                                          |
+| `get_document_info`       | Active document name, units, CAM setup/operation counts                                                                                                                           |
+| `get_setups`              | All setups: name, type, machine info, stock dimensions, body materials                                                                                                            |
+| `get_operations`          | Operations with type, strategy, tool info, feeds, speeds, coolant, notes, stepover/stepdown                                                                                       |
+| `get_operation_details`   | Full parameter dump organized by category (feeds, speeds, engagement, linking, drilling, passes, heights, strategy) + computed metrics (chip load, surface speed, stepover ratio) |
+| `get_tools`               | All tools in use: type, diameter, flute count, lengths, holder info, which operations use them                                                                                    |
+| `get_machining_time`      | Estimated cycle time per setup/operation                                                                                                                                          |
+| `get_toolpath_status`     | Which toolpaths are generated, valid, outdated, or have warnings                                                                                                                  |
+| `get_nc_programs`         | List all NC programs with their operations, post-processor config, and output settings                                                                                            |
+| `list_material_libraries` | Browse available material libraries and their materials                                                                                                                           |
+| `get_material_properties` | Read all physical/mechanical properties of a specific material                                                                                                                    |
+| `generate_toolpaths`      | Trigger toolpath generation for specific operations or entire setups                                                                                                              |
+| `post_process`            | Post-process a setup to generate NC/G-code files using the configured post processor                                                                                              |
+
 
 ### Write Tools (requires `--mode full`) - USE AT YOUR OWN RISK
 
-| Tool | Description |
-|------|-------------|
-| `update_operation_parameters` | Update feeds, speeds, and engagement parameters on a CAM operation |
-| `assign_body_material` | Assign a physical material from a library to a body |
-| `create_custom_material` | Create a new material by copying an existing one and overriding properties |
+
+| Tool                          | Description                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `update_operation_parameters` | Update feeds, speeds, and engagement parameters on a CAM operation             |
+| `assign_body_material`        | Assign a physical material from a library to a body                            |
+| `create_custom_material`      | Create a new material by copying an existing one and overriding properties     |
 | `update_setup_machine_params` | Update machine-level parameters on a setup (spindle limits, feed limits, etc.) |
+
 
 All write tools return a before/after diff showing exactly what changed.
 
@@ -82,6 +90,7 @@ irm https://raw.githubusercontent.com/BJam/fusion-cam-mcp/main/install.ps1 | iex
 ```
 
 The script will prompt you to choose:
+
 - **Mode**: read-only (recommended), full (write), or both
 - **Target**: Claude Desktop (recommended), Cursor, or both
 
@@ -110,8 +119,7 @@ Close and reopen Claude Desktop and/or Cursor so it picks up the new MCP configu
 
 ### Alternative: Manual / Developer Setup
 
-<details>
-<summary>For contributors or if you prefer to run from source.</summary>
+For contributors or if you prefer to run from source.
 
 #### Clone and install Python dependencies
 
@@ -171,8 +179,6 @@ Or run the self-installer from source to auto-configure:
 
 Add the same `mcpServers` block to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` in the project root.
 
-</details>
-
 ## Usage Examples
 
 Once connected, ask your AI assistant things like:
@@ -215,14 +221,15 @@ The default TCP port is `9876`. Override it by setting the `FUSION_CAM_MCP_PORT`
 
 The `get_machining_time` tool uses these default assumptions when estimating cycle times:
 
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| Feed scale | 1.0 | Multiplier on programmed feed rates |
-| Rapid feed | 500 cm/min (~200 IPM) | Machine rapid traverse rate |
-| Tool change time | 15 seconds | Time per tool change |
+
+| Parameter        | Default               | Notes                               |
+| ---------------- | --------------------- | ----------------------------------- |
+| Feed scale       | 1.0                   | Multiplier on programmed feed rates |
+| Rapid feed       | 500 cm/min (~200 IPM) | Machine rapid traverse rate         |
+| Tool change time | 15 seconds            | Time per tool change                |
+
 
 These are reasonable defaults for many machines. Your actual cycle times will vary based on your machine's rapid rates and tool changer speed.
-
 
 ## How It Works
 
