@@ -88,7 +88,15 @@ main() {
 
     echo ""
     echo "── Running installer ──"
-    "$BINARY" --install < /dev/tty
+    # PyInstaller's bootloader returns exit code 1 on macOS due to a
+    # semaphore init failure (semctl: Operation not permitted). The
+    # install itself succeeds; we verify via version.json.
+    "$BINARY" --install < /dev/tty || true
+
+    if [[ ! -f "$INSTALL_DIR/version.json" ]]; then
+        err "Install failed — see errors above."
+        exit 1
+    fi
 }
 
 main
