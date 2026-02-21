@@ -322,6 +322,50 @@ def get_tools(document_name: Optional[str] = None) -> str:
 
 
 @mcp.tool()
+def get_library_tools(
+    location: Optional[str] = None,
+    library_name: Optional[str] = None,
+    tool_type: Optional[str] = None,
+    min_diameter: Optional[float] = None,
+    max_diameter: Optional[float] = None,
+) -> str:
+    """
+    Browse cutting tools from Fusion 360's CAMLibraryManager tool libraries.
+
+    Unlike get_tools (which reads the document-embedded tool library), this
+    tool reads the "external" libraries available in the Fusion 360 tool
+    library manager — your local library, Autodesk's bundled Fusion 360
+    libraries, cloud libraries, and hub/team libraries. Use this to find
+    alternative tools you own but haven't yet assigned to an operation.
+
+    Diameter values are in Fusion's internal units (cm). For example, a
+    12 mm end mill has tool_diameter ≈ 1.2 (cm).
+
+    Args:
+        location: Which library root to query. One of:
+                    "local"     - tools saved on this machine (default)
+                    "fusion360" - Autodesk-supplied sample/reference libs
+                    "cloud"     - Autodesk cloud library
+                    "hub"       - team/hub shared library
+        library_name: Optional substring to filter by library filename
+                      (e.g. "Metric", "Inch", "Harvey"). Case-insensitive.
+        tool_type: Optional substring to filter by tool type
+                   (e.g. "flat end mill", "ball end mill", "drill").
+                   Case-insensitive.
+        min_diameter: Optional minimum tool diameter in cm (e.g. 0.6 for 6 mm).
+        max_diameter: Optional maximum tool diameter in cm (e.g. 2.5 for 25 mm).
+    """
+    return _run_query(
+        "get_library_tools",
+        location=location or "local",
+        library_name=library_name,
+        tool_type=tool_type,
+        min_diameter=min_diameter,
+        max_diameter=max_diameter,
+    )
+
+
+@mcp.tool()
 def get_machining_time(
     setup_name: Optional[str] = None,
     document_name: Optional[str] = None,
