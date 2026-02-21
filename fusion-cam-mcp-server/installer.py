@@ -2,7 +2,7 @@
 Self-installer for the Fusion 360 CAM MCP server.
 
 When invoked via `--install`, this module:
-  1. Extracts the bundled Fusion MCP Bridge add-in to ~/fusion-cam-mcp/fusion-mcp-bridge/
+  1. Extracts the bundled Fusion MCP Bridge add-in to the Fusion 360 AddIns directory
   2. Writes/merges the MCP config for Claude Desktop and/or Cursor
   3. Prints instructions for the Fusion 360 add-in setup
 """
@@ -21,8 +21,46 @@ ADDIN_FILES = [
     "executor.py",
 ]
 
-INSTALL_DIR = os.path.join(os.path.expanduser("~"), "fusion-cam-mcp")
-ADDIN_DEST = os.path.join(INSTALL_DIR, "fusion-mcp-bridge")
+def _get_install_dir() -> str:
+    """Platform-standard location for the MCP server binary."""
+    system = platform.system()
+    if system == "Darwin":
+        return os.path.join(
+            os.path.expanduser("~"),
+            "Library", "Application Support", "fusion-cam-mcp",
+        )
+    elif system == "Windows":
+        return os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local")),
+            "fusion-cam-mcp",
+        )
+    return os.path.join(
+        os.environ.get("XDG_DATA_HOME", os.path.join(os.path.expanduser("~"), ".local", "share")),
+        "fusion-cam-mcp",
+    )
+
+
+INSTALL_DIR = _get_install_dir()
+
+
+def _get_fusion_addins_dir() -> str:
+    """Standard Fusion 360 AddIns directory where add-ins are auto-discovered."""
+    system = platform.system()
+    if system == "Darwin":
+        return os.path.join(
+            os.path.expanduser("~"),
+            "Library", "Application Support", "Autodesk",
+            "Autodesk Fusion 360", "API", "AddIns",
+        )
+    elif system == "Windows":
+        return os.path.join(
+            os.environ.get("APPDATA", ""),
+            "Autodesk", "Autodesk Fusion 360", "API", "AddIns",
+        )
+    return os.path.join(os.path.expanduser("~"), "fusion-cam-mcp", "fusion-mcp-bridge")
+
+
+ADDIN_DEST = os.path.join(_get_fusion_addins_dir(), "fusion-mcp-bridge")
 
 
 def _get_binary_name() -> str:
@@ -72,7 +110,7 @@ def _get_claude_config_path() -> str:
 
 
 def _get_cursor_config_path() -> str:
-    return os.path.join(os.getcwd(), ".cursor", "mcp.json")
+    return os.path.join(os.path.expanduser("~"), ".cursor", "mcp.json")
 
 
 def _prompt(message: str, default: str = "1") -> str:
@@ -239,15 +277,15 @@ def run_install() -> None:
     print()
     print("── Setup complete! ──")
     print()
-    print("  One manual step remains — install the Fusion 360 add-in:")
+    print("  The Fusion MCP Bridge add-in has been installed to:")
+    print(f"    {addin_path}")
+    print()
+    print("  To activate it:")
     print()
     print("    1. Open Fusion 360")
     print('    2. Go to UTILITIES > ADD-INS (or press Shift+S)')
-    print('    3. In the Add-Ins tab, click the green + next to "My Add-Ins"')
-    print("    4. Navigate to:")
-    print(f"       {addin_path}")
-    print("    5. Select fusion-mcp-bridge and click Run")
-    print('    6. (Optional) Check "Run on Startup" for auto-start')
+    print('    3. Find "fusion-mcp-bridge" under My Add-Ins and click Run')
+    print('    4. (Optional) Check "Run on Startup" for auto-start')
     print()
     print(f"  Then restart {apps} to pick up the new MCP config.")
     print()

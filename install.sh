@@ -6,7 +6,7 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/BJam/fusion-cam-mcp/main/install.sh | bash
 
 REPO="BJam/fusion-cam-mcp"
-INSTALL_DIR="$HOME/fusion-cam-mcp"
+INSTALL_DIR="$HOME/Library/Application Support/fusion-cam-mcp"
 BINARY="$INSTALL_DIR/fusion-cam-mcp"
 
 info()  { echo "  ✓ $*"; }

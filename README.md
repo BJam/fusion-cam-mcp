@@ -87,24 +87,26 @@ The script will prompt you to choose:
 
 Existing MCP configs are merged -- the script won't overwrite your other servers.
 
-> **macOS Gatekeeper note:** Since the binary is not code-signed, macOS will block it on first run. Go to **System Settings > Privacy & Security**, scroll to the bottom, and click **Allow Anyway** next to the blocked binary. The install script also runs `xattr -d com.apple.quarantine` which can prevent the block if applied before the first launch attempt.
+> **macOS Gatekeeper note:** Since the binary is not code-signed, macOS may block it on first run. Go to **System Settings > Privacy & Security**, scroll to the bottom, and click **Allow Anyway** next to the blocked binary. The install script runs `xattr -d com.apple.quarantine` to prevent this, but some macOS versions still require manual approval.
+
+> **Windows SmartScreen note:** Windows may show a "Windows protected your PC" warning for the unsigned binary. Click **More info** then **Run anyway** to proceed.
+
+> **Windows execution policy note:** If `irm | iex` is blocked, run this first: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
 ### 2. Install the Fusion MCP Bridge add-in
 
-This step is done inside Fusion 360 and is the same on macOS and Windows.
+The installer places the add-in in Fusion 360's standard AddIns directory, so it's auto-discovered.
 
 1. Open Fusion 360
 2. Go to **UTILITIES > ADD-INS** (or press `Shift+S`)
-3. In the **Add-Ins** tab, click the green **+** button next to "My Add-Ins"
-4. Navigate to the `fusion-mcp-bridge` folder that the installer extracted (printed at the end of step 1, typically `~/fusion-cam-mcp/fusion-mcp-bridge/`) and click **Open**
-5. Select `fusion-mcp-bridge` in the list and click **Run**
-6. (Optional) Check **Run on Startup** so it starts automatically with Fusion
+3. Find **fusion-mcp-bridge** under **My Add-Ins** and click **Run**
+4. (Optional) Check **Run on Startup** so it starts automatically with Fusion
 
 The bridge will begin listening on `localhost:9876`.
 
-### 3. Restart Claude Desktop
+### 3. Restart your MCP client
 
-Close and reopen Claude Desktop so it picks up the new MCP configuration. You should see the Fusion 360 CAM tools available in the tools menu (hammer icon).
+Close and reopen Claude Desktop and/or Cursor so it picks up the new MCP configuration. In Claude Desktop, you should see the Fusion 360 CAM tools in the tools menu (hammer icon). In Cursor, the MCP server will appear in your MCP settings.
 
 ### Alternative: Manual / Developer Setup
 

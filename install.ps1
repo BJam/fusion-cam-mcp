@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 
 $Repo       = "BJam/fusion-cam-mcp"
 $Asset      = "fusion-cam-mcp-windows-x64.exe"
-$InstallDir = Join-Path $env:USERPROFILE "fusion-cam-mcp"
+$InstallDir = Join-Path $env:LOCALAPPDATA "fusion-cam-mcp"
 $Binary     = Join-Path $InstallDir "fusion-cam-mcp.exe"
 
 function Write-Info { param([string]$Msg) Write-Host "  ✓ $Msg" -ForegroundColor Green }
