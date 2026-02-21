@@ -17,19 +17,41 @@ Runs in stdio mode for Cursor/Claude integration.
 
 __version__ = "0.1.0"
 
-import argparse
-import json
 import os
 import sys
-from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
-
-# Add the server directory to sys.path for imports
+# Early exit for install/uninstall — skip heavy MCP imports
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 if SERVER_DIR not in sys.path:
     sys.path.insert(0, SERVER_DIR)
 
+if __name__ == "__main__":
+    if "--install" in sys.argv:
+        from installer import run_install
+        try:
+            run_install()
+        except Exception as e:
+            print(f"\n  ERROR: Install failed: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        sys.exit(0)
+    elif "--uninstall" in sys.argv:
+        from installer import run_uninstall
+        try:
+            run_uninstall()
+        except Exception as e:
+            print(f"\n  ERROR: Uninstall failed: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        sys.exit(0)
+
+import argparse
+import json
+from typing import Optional
+
+from mcp.server.fastmcp import FastMCP
 from fusion_client import FusionClient
 from queries import load_query
 
@@ -717,25 +739,4 @@ def update_setup_machine_params(
 # ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if "--install" in sys.argv:
-        from installer import run_install
-        try:
-            run_install()
-        except Exception as e:
-            print(f"\n  ERROR: Install failed: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-        sys.exit(0)
-    elif "--uninstall" in sys.argv:
-        from installer import run_uninstall
-        try:
-            run_uninstall()
-        except Exception as e:
-            print(f"\n  ERROR: Uninstall failed: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-        sys.exit(0)
-    else:
-        mcp.run()
+    mcp.run()
