@@ -35,15 +35,20 @@ function Main {
     Write-Host ""
     Write-Host "── Downloading latest release ──"
 
+    $TmpFile = [System.IO.Path]::GetTempFileName()
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $wc = New-Object System.Net.WebClient
-        $wc.DownloadFile($Url, $Binary)
+        Invoke-WebRequest -Uri $Url -OutFile $TmpFile -UseBasicParsing
+        Move-Item -Path $TmpFile -Destination $Binary -Force
     } catch {
+        Remove-Item -Path $TmpFile -ErrorAction SilentlyContinue
         Write-Err "Download failed: $_"
         Write-Host "  URL: $Url"
         exit 1
     }
+
+    # Remove Zone.Identifier to prevent SmartScreen blocking on every launch
+    Unblock-File -Path $Binary
 
     Write-Info "Downloaded to $Binary"
 

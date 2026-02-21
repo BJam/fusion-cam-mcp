@@ -226,6 +226,26 @@ This architecture means all business logic lives in the `queries/` directory on 
 
 The bridge's executor runs Python scripts sent over TCP. This is by design -- it allows the MCP server to send query logic without requiring a bridge restart. The TCP server is bound to `127.0.0.1` (localhost only), so only local processes can connect. No remote access is possible.
 
+## Uninstalling
+
+Run the built-in uninstaller to cleanly remove all components:
+
+**macOS:**
+
+```bash
+~/Library/Application\ Support/fusion-cam-mcp/fusion-cam-mcp --uninstall
+```
+
+**Windows (PowerShell):**
+
+```powershell
+& "$env:LOCALAPPDATA\fusion-cam-mcp\fusion-cam-mcp.exe" --uninstall
+```
+
+This removes the server binary, the Fusion MCP Bridge add-in files, and the `fusion360-cam-mcp` entries from your Claude Desktop and Cursor configs (other MCP servers are not affected).
+
+To also remove the add-in from Fusion 360's UI, open **UTILITIES > ADD-INS**, right-click **fusion-mcp-bridge**, and select **Delete**.
+
 ## License
 
 [MIT](LICENSE)

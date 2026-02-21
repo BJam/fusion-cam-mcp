@@ -8,9 +8,13 @@ set -euo pipefail
 REPO="BJam/fusion-cam-mcp"
 INSTALL_DIR="$HOME/Library/Application Support/fusion-cam-mcp"
 BINARY="$INSTALL_DIR/fusion-cam-mcp"
+TMPFILE=""
 
 info()  { echo "  ✓ $*"; }
 err()   { echo "  ✗ $*" >&2; }
+
+cleanup() { [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && rm -f "$TMPFILE"; }
+trap cleanup EXIT
 
 detect_asset() {
     local os arch
@@ -62,14 +66,17 @@ main() {
 
     echo ""
     echo "── Downloading latest release ──"
+    TMPFILE="$(mktemp)"
     if command -v curl &>/dev/null; then
-        curl -fSL --progress-bar -o "$BINARY" "$url"
+        curl -fSL --progress-bar -o "$TMPFILE" "$url"
     elif command -v wget &>/dev/null; then
-        wget -q --show-progress -O "$BINARY" "$url"
+        wget -q --show-progress -O "$TMPFILE" "$url"
     else
         err "Neither curl nor wget found. Install one and try again."
         exit 1
     fi
+    mv "$TMPFILE" "$BINARY"
+    TMPFILE=""
     info "Downloaded to $BINARY"
 
     chmod +x "$BINARY"

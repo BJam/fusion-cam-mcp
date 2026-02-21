@@ -720,5 +720,8 @@ if __name__ == "__main__":
     if "--install" in sys.argv:
         from installer import run_install
         run_install()
+    elif "--uninstall" in sys.argv:
+        from installer import run_uninstall
+        run_uninstall()
     else:
         mcp.run()
