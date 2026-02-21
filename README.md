@@ -1,6 +1,13 @@
 # Fusion 360 CAM MCP Server
 
-> **WARNING: This project is a work in progress.** APIs, tools, and behavior may change without notice. The installer modifies your MCP configuration files (e.g. `~/.cursor/mcp.json`, `claude_desktop_config.json`) to register this server. In full mode, AI assistants can write data directly to your Fusion 360 document — including feeds, speeds, and machining parameters. Incorrect changes could affect real toolpaths and G-code output. Use at your own risk!
+> **WARNING — This project is a work in progress.**
+>
+> 1. **APIs may change without notice.** Tools, behavior, and configuration are still evolving.
+> 2. **The installer modifies your MCP configuration files** (e.g. `~/.cursor/mcp.json`, `claude_desktop_config.json`) to register this server.
+> 3. **In full mode, AI assistants can write data directly to your Fusion 360 document** — including feeds, speeds, and machining parameters. Incorrect changes could affect real toolpaths and G-code output.
+> 4. **Windows installation and usage is UNTESTED.**
+>
+> **Use at your own risk!**
 
 An MCP server that exposes Fusion 360 CAM/manufacturing data to AI assistants (Cursor, Claude, etc.). Query setups, operations, tools, feeds & speeds, machining times, and toolpath status -- then get AI-powered analysis of your CNC machining parameters.
 
