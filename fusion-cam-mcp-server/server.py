@@ -52,8 +52,48 @@ import json
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from fusion_client import FusionClient
 from queries import load_query
+
+# ──────────────────────────────────────────────────────────────────────
+# Tool annotation presets
+# ──────────────────────────────────────────────────────────────────────
+
+_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_GENERATE = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_POST_PROCESS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+
+_WRITE = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+_WRITE_NOT_IDEMPOTENT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=False,
+    openWorldHint=False,
+)
 
 # ──────────────────────────────────────────────────────────────────────
 # Server mode: "read-only" (default) or "full"
@@ -180,7 +220,7 @@ def _run_query(query_name: str, *, write: bool = False, **kwargs) -> str:
 # MCP Tool Definitions
 # ──────────────────────────────────────────────────────────────────────
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def ping() -> str:
     """
     Health check to verify the Fusion 360 CAM MCP add-in connection is alive.
@@ -201,7 +241,7 @@ def ping() -> str:
         )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def list_documents() -> str:
     """
     List all open Fusion 360 documents.
@@ -214,7 +254,7 @@ def list_documents() -> str:
     return _run_query("list_documents")
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_document_info(document_name: Optional[str] = None) -> str:
     """
     Get information about the active Fusion 360 document.
@@ -230,16 +270,17 @@ def get_document_info(document_name: Optional[str] = None) -> str:
     return _run_query("get_document_info", document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_setups(document_name: Optional[str] = None) -> str:
     """
     List all CAM setups in the active document.
 
     Returns each setup's name, type (milling/turning), operation count,
-    stock mode, WCS origin, and associated model bodies.
+    stock mode, WCS origin, notes, and associated model bodies.
     Use setup names from this list when calling other tools that filter by setup.
 
     Also includes:
+    - Notes: free-text notes on the setup (e.g. work holding, fixturing details)
     - Machine info: assigned machine name, spindle RPM range, max feed rates
     - Stock dimensions: mode (fixed box/relative/solid) and X/Y/Z sizes
     - Body materials: physical material assigned to each model body (e.g. "Oak", "Aluminum 6061")
@@ -257,7 +298,7 @@ def get_setups(document_name: Optional[str] = None) -> str:
     return _run_query("get_setups", document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_operations(
     setup_name: Optional[str] = None,
     document_name: Optional[str] = None,
@@ -280,7 +321,7 @@ def get_operations(
     return _run_query("get_operations", setup_name=setup_name, document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_operation_details(
     operation_name: str,
     setup_name: Optional[str] = None,
@@ -325,7 +366,7 @@ def get_operation_details(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_tools(document_name: Optional[str] = None) -> str:
     """
     List all cutting tools from the document's tool library.
@@ -343,7 +384,7 @@ def get_tools(document_name: Optional[str] = None) -> str:
     return _run_query("get_tools", document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_library_tools(
     location: Optional[str] = None,
     library_name: Optional[str] = None,
@@ -387,7 +428,7 @@ def get_library_tools(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_machining_time(
     setup_name: Optional[str] = None,
     document_name: Optional[str] = None,
@@ -407,7 +448,7 @@ def get_machining_time(
     return _run_query("get_machining_time", setup_name=setup_name, document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_toolpath_status(
     setup_name: Optional[str] = None,
     document_name: Optional[str] = None,
@@ -428,7 +469,7 @@ def get_toolpath_status(
     return _run_query("get_toolpath_status", setup_name=setup_name, document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_nc_programs(document_name: Optional[str] = None) -> str:
     """
     List all NC programs configured in the document.
@@ -445,7 +486,7 @@ def get_nc_programs(document_name: Optional[str] = None) -> str:
     return _run_query("get_nc_programs", document_name=document_name)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_GENERATE)
 def generate_toolpaths(
     setup_name: Optional[str] = None,
     operation_names: Optional[list[str]] = None,
@@ -478,7 +519,7 @@ def generate_toolpaths(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_POST_PROCESS)
 def post_process(
     setup_name: str,
     output_folder: str,
@@ -521,7 +562,7 @@ def post_process(
 # Write MCP Tool Definitions
 # ──────────────────────────────────────────────────────────────────────
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE)
 def update_operation_parameters(
     operation_name: str,
     parameters: dict,
@@ -566,7 +607,7 @@ def update_operation_parameters(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def list_material_libraries(
     library_name: Optional[str] = None,
     document_name: Optional[str] = None,
@@ -593,7 +634,7 @@ def list_material_libraries(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def get_material_properties(
     material_name: str,
     library_name: str,
@@ -621,7 +662,7 @@ def get_material_properties(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_NOT_IDEMPOTENT)
 def create_custom_material(
     new_material_name: str,
     source_material_name: str,
@@ -662,7 +703,7 @@ def create_custom_material(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE)
 def assign_body_material(
     body_name: str,
     material_name: str,
@@ -697,7 +738,7 @@ def assign_body_material(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE)
 def update_setup_machine_params(
     setup_name: str,
     parameters: dict,

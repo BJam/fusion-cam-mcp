@@ -21,6 +21,10 @@ def run(params):
             "operationCount": setup.allOperations.count,
         }
 
+        notes = _safe_attr(setup, "notes")
+        if notes:
+            setup_info["notes"] = notes
+
         op_type = _safe_attr(setup, "operationType")
         if op_type is not None:
             setup_info["type"] = OPERATION_TYPE_MAP.get(op_type, str(op_type))

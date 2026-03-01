@@ -5,17 +5,25 @@ Runs a TCP listener in a background thread. Each incoming request is a
 newline-delimited JSON object. The request is dispatched to a handler
 on the Fusion main thread via CustomEvent, and the JSON response is
 sent back over the socket.
+
+The server auto-restarts on transient socket errors (bind failure,
+accept crash) up to a configurable maximum number of retries.
 """
 
 import json
 import os
 import socket
 import threading
+import time
 import traceback
 
 
 # Default port, overridable via environment variable
 DEFAULT_PORT = 9876
+
+# Auto-restart configuration
+_RESTART_DELAY = 2.0   # seconds between bind retries
+_MAX_RESTARTS = 10      # consecutive failures before giving up
 
 
 def get_port():
@@ -34,6 +42,10 @@ class JsonTcpServer:
     Each client connection is handled in its own thread. The actual
     request handling is delegated to a callback that runs on the
     Fusion main thread via CustomEvent (which serializes API access).
+
+    If the listening socket dies (bind failure, accept crash), the
+    server automatically retries up to _MAX_RESTARTS times before
+    giving up.
     """
 
     def __init__(self, request_callback, logger=None):
@@ -66,7 +78,7 @@ class JsonTcpServer:
             return
 
         self._running = True
-        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread = threading.Thread(target=self._serve_with_restart, daemon=True)
         self._thread.start()
         self._log(f"TCP server started on localhost:{self._port}")
 
@@ -84,12 +96,7 @@ class JsonTcpServer:
             self._client_sockets.clear()
 
         # Close the server socket to unblock accept()
-        if self._server_socket:
-            try:
-                self._server_socket.close()
-            except Exception:
-                pass
-            self._server_socket = None
+        self._close_server_socket()
 
         # Wait for client threads to finish
         for t in self._client_threads:
@@ -102,51 +109,92 @@ class JsonTcpServer:
 
         self._log("TCP server stopped")
 
-    def _serve(self):
-        """Main server loop (runs in background thread)."""
+    def _close_server_socket(self):
+        """Close the listening socket if open."""
+        if self._server_socket:
+            try:
+                self._server_socket.close()
+            except Exception:
+                pass
+            self._server_socket = None
+
+    def _bind_and_listen(self):
+        """Create, bind, and listen. Returns True on success."""
+        self._close_server_socket()
         try:
-            self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self._server_socket.settimeout(1.0)  # Allow periodic checks of _running
-            self._server_socket.bind(("127.0.0.1", self._port))
-            self._server_socket.listen(5)
-
-            while self._running:
-                try:
-                    client_socket, addr = self._server_socket.accept()
-                except socket.timeout:
-                    continue
-                except OSError:
-                    break  # Socket was closed
-
-                self._log(f"Client connected from {addr}")
-
-                # Track the socket so stop() can close it
-                with self._clients_lock:
-                    self._client_sockets.append(client_socket)
-
-                # Handle each client in its own thread
-                client_thread = threading.Thread(
-                    target=self._handle_client_thread,
-                    args=(client_socket, addr),
-                    daemon=True,
-                )
-                client_thread.start()
-                self._client_threads.append(client_thread)
-
-                # Prune finished threads
-                self._client_threads = [
-                    t for t in self._client_threads if t.is_alive()
-                ]
-
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.settimeout(1.0)  # Allow periodic checks of _running
+            s.bind(("127.0.0.1", self._port))
+            s.listen(5)
+            self._server_socket = s
+            self._log(f"TCP server listening on localhost:{self._port}")
+            return True
         except Exception:
-            self._log(f"TCP server error: {traceback.format_exc()}")
-        finally:
-            if self._server_socket:
-                try:
-                    self._server_socket.close()
-                except Exception:
-                    pass
+            self._log(f"TCP bind failed: {traceback.format_exc()}")
+            self._close_server_socket()
+            return False
+
+    def _serve_with_restart(self):
+        """Outer loop: re-binds the socket on failure, up to _MAX_RESTARTS times."""
+        restarts = 0
+
+        while self._running:
+            if not self._bind_and_listen():
+                restarts += 1
+                if restarts > _MAX_RESTARTS:
+                    self._log(
+                        f"TCP server exceeded {_MAX_RESTARTS} restart attempts — giving up"
+                    )
+                    break
+                self._log(
+                    f"Retrying bind in {_RESTART_DELAY}s "
+                    f"(attempt {restarts}/{_MAX_RESTARTS})"
+                )
+                time.sleep(_RESTART_DELAY)
+                continue
+
+            restarts = 0
+
+            try:
+                self._accept_loop()
+            except Exception:
+                if self._running:
+                    self._log(f"Accept loop crashed: {traceback.format_exc()}")
+
+            if self._running:
+                self._log(f"Socket lost — restarting in {_RESTART_DELAY}s")
+                self._close_server_socket()
+                time.sleep(_RESTART_DELAY)
+
+    def _accept_loop(self):
+        """Inner loop: accepts clients until the socket errors out."""
+        while self._running:
+            try:
+                client_socket, addr = self._server_socket.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                if self._running:
+                    raise
+                break
+
+            self._log(f"Client connected from {addr}")
+
+            with self._clients_lock:
+                self._client_sockets.append(client_socket)
+
+            client_thread = threading.Thread(
+                target=self._handle_client_thread,
+                args=(client_socket, addr),
+                daemon=True,
+            )
+            client_thread.start()
+            self._client_threads.append(client_thread)
+
+            self._client_threads = [
+                t for t in self._client_threads if t.is_alive()
+            ]
 
     def _handle_client_thread(self, client_socket, addr):
         """Handle a single client connection in its own thread."""
