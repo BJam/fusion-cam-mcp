@@ -126,7 +126,7 @@ def _check_no_active_command():
                     f"An edit dialog is currently open in Fusion 360 "
                     f"(active command: '{active_cmd}'). "
                     f"Please OK or Cancel the dialog before making changes "
-                    f"via MCP. Any API changes made while a dialog is open "
+                    f"via the bridge. Any API changes made while a dialog is open "
                     f"will be lost if the dialog is cancelled."
                 ),
             }

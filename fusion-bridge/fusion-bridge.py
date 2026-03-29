@@ -1,9 +1,9 @@
 """
-Fusion MCP Bridge
+Fusion bridge (add-in)
 
-A generic Fusion 360 add-in that bridges external MCP servers to the
-Fusion Python SDK over a local TCP socket. Any MCP server can send
-Python scripts to be executed on the Fusion main thread.
+A generic Fusion 360 add-in that bridges external clients to the
+Fusion Python SDK over a local TCP socket. Any local client (e.g. the
+fusion-cam CLI) can send Python scripts to be executed on the Fusion main thread.
 
 Architecture:
     - TCP server runs in a background thread (tcp_server.py)
@@ -13,7 +13,7 @@ Architecture:
     - The executor runs arbitrary Python with adsk.* available (executor.py)
     - Results are passed back to the TCP thread and sent as JSON responses
 
-All business logic lives on the MCP server side. The bridge is a thin
+Typical query logic lives in the fusion-cam CLI package; the bridge is a thin
 "run this code on the main thread" proxy.
 """
 
@@ -50,10 +50,10 @@ from executor import execute_request
 # File-based logging (alongside Fusion's app.log)
 # ──────────────────────────────────────────────────────────────────────
 
-LOG_PATH = Path.home() / "fusion-mcp-bridge.log"
+LOG_PATH = Path.home() / "fusion-bridge.log"
 
 def _setup_logging():
-    logger = logging.getLogger("fusion_mcp_bridge")
+    logger = logging.getLogger("fusion_bridge")
     logger.setLevel(logging.DEBUG)
     if not logger.handlers:
         handler = RotatingFileHandler(
@@ -67,7 +67,7 @@ def _setup_logging():
 _file_logger = _setup_logging()
 
 # Custom event ID for marshaling requests to the main thread
-CUSTOM_EVENT_ID = "FusionMcpBridgeRequestEvent"
+CUSTOM_EVENT_ID = "FusionBridgeRequestEvent"
 
 # Backup timer interval — fires CustomEvent periodically in case
 # fireCustomEvent() from a daemon thread is silently dropped.
@@ -103,7 +103,7 @@ def log(msg):
     _file_logger.info(msg)
     try:
         app = adsk.core.Application.get()
-        app.log(f"[MCP-Bridge] {msg}")
+        app.log(f"[FusionBridge] {msg}")
     except Exception:
         pass
 
@@ -145,7 +145,7 @@ def dispatch_to_main_thread(request):
     execution and blocks until the result is ready.
     """
     if request.get("action") == "ping":
-        return {"success": True, "data": {"status": "ok", "message": "Fusion MCP Bridge is running"}}
+        return {"success": True, "data": {"status": "ok", "message": "Fusion bridge is running"}}
 
     item = WorkItem(request)
     _work_queue.put(item)
@@ -204,12 +204,12 @@ def run(context):
         )
         _tcp_server.start()
 
-        log(f"Fusion MCP Bridge started (port {_tcp_server.port}, log: {LOG_PATH})")
+        log(f"Fusion bridge started (port {_tcp_server.port}, log: {LOG_PATH})")
 
     except Exception:
-        _file_logger.exception("Failed to start Fusion MCP Bridge")
+        _file_logger.exception("Failed to start Fusion bridge")
         if _ui:
-            _ui.messageBox(f"Fusion MCP Bridge failed to start:\n{traceback.format_exc()}")
+            _ui.messageBox(f"Fusion bridge failed to start:\n{traceback.format_exc()}")
 
 
 def stop(context):
@@ -237,9 +237,9 @@ def stop(context):
 
         _handlers.clear()
 
-        log("Fusion MCP Bridge stopped")
+        log("Fusion bridge stopped")
 
     except Exception:
-        _file_logger.exception("Failed to stop Fusion MCP Bridge cleanly")
+        _file_logger.exception("Failed to stop Fusion bridge cleanly")
         if _ui:
-            _ui.messageBox(f"Fusion MCP Bridge failed to stop cleanly:\n{traceback.format_exc()}")
+            _ui.messageBox(f"Fusion bridge failed to stop cleanly:\n{traceback.format_exc()}")

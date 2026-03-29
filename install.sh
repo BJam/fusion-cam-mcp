@@ -1,102 +1,74 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Downloads the latest fusion-cam-mcp binary for this platform and runs --install.
-# Usage:
+# Developer install: clone (or use cwd), venv, editable install, deploy Fusion bridge add-in.
+# Usage (from repo root after clone):
+#   bash install.sh
+# Or:
 #   curl -fsSL https://raw.githubusercontent.com/BJam/fusion-cam-mcp/main/install.sh | bash
 
-REPO="BJam/fusion-cam-mcp"
-INSTALL_DIR="$HOME/Library/Application Support/fusion-cam-mcp"
-BINARY="$INSTALL_DIR/fusion-cam-mcp"
-TMPFILE=""
+REPO_URL="${FUSION_CAM_REPO_URL:-https://github.com/BJam/fusion-cam-mcp.git}"
+CLONE_DIR="${FUSION_CAM_CLONE_DIR:-}"
 
 info()  { echo "  ✓ $*"; }
 err()   { echo "  ✗ $*" >&2; }
 
-cleanup() { [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && rm -f "$TMPFILE"; }
-trap cleanup EXIT
-
-detect_asset() {
-    local os arch
-    os="$(uname -s)"
-    arch="$(uname -m)"
-
-    case "$os" in
-        Darwin)
-            case "$arch" in
-                arm64)  echo "fusion-cam-mcp-darwin-arm64" ;;
-                x86_64) echo "fusion-cam-mcp-darwin-x64" ;;
-                *)      err "Unsupported macOS architecture: $arch"; exit 1 ;;
-            esac
-            ;;
-        Linux)
-            err "Linux binaries are not currently published."
-            err "Use the developer setup instead: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
-            exit 1
-            ;;
-        *)
-            err "Unsupported OS: $os (use install.ps1 on Windows)"
-            exit 1
-            ;;
-    esac
-}
-
-get_download_url() {
-    local asset="$1"
-    local url
-    url="https://github.com/$REPO/releases/latest/download/$asset"
-    echo "$url"
+ensure_repo() {
+    if [[ -f pyproject.toml ]] && grep -q 'fusion-cam-mcp' pyproject.toml 2>/dev/null; then
+        return 0
+    fi
+    if [[ -z "$CLONE_DIR" ]]; then
+        err "Not in the fusion-cam-mcp repo root (no pyproject.toml). Set FUSION_CAM_CLONE_DIR or clone first:"
+        err "  git clone $REPO_URL && cd fusion-cam-mcp && bash install.sh"
+        exit 1
+    fi
+    if [[ ! -d "$CLONE_DIR" ]]; then
+        info "Cloning into $CLONE_DIR"
+        git clone --depth 1 "$REPO_URL" "$CLONE_DIR"
+    fi
+    cd "$CLONE_DIR"
 }
 
 main() {
     echo ""
     echo "╔══════════════════════════════════════════════╗"
-    echo "║  Fusion 360 CAM MCP — Download & Install     ║"
+    echo "║  Fusion 360 CAM CLI — developer install      ║"
     echo "╚══════════════════════════════════════════════╝"
     echo ""
 
-    local asset
-    asset="$(detect_asset)"
-    info "Platform: $asset"
+    ensure_repo
 
-    local url
-    url="$(get_download_url "$asset")"
-
-    mkdir -p "$INSTALL_DIR"
-
-    echo ""
-    echo "── Downloading latest release ──"
-    TMPFILE="$(mktemp)"
-    if command -v curl &>/dev/null; then
-        curl -fSL --progress-bar -o "$TMPFILE" "$url"
-    elif command -v wget &>/dev/null; then
-        wget -q --show-progress -O "$TMPFILE" "$url"
-    else
-        err "Neither curl nor wget found. Install one and try again."
+    if ! command -v python3 &>/dev/null; then
+        err "python3 not found. Install Python 3.10+ and retry."
         exit 1
     fi
-    mv "$TMPFILE" "$BINARY"
-    TMPFILE=""
-    info "Downloaded to $BINARY"
 
-    chmod +x "$BINARY"
-
-    # Strip macOS quarantine attribute so Gatekeeper doesn't block it
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        xattr -d com.apple.quarantine "$BINARY" 2>/dev/null || true
+    if [[ ! -d .venv ]]; then
+        info "Creating .venv"
+        python3 -m venv .venv
     fi
+
+    # shellcheck source=/dev/null
+    source .venv/bin/activate
+    info "Upgrading pip (minimal)"
+    python -m pip install -q --upgrade pip
 
     echo ""
-    echo "── Running installer ──"
-    # PyInstaller's bootloader returns exit code 1 on macOS due to a
-    # semaphore init failure (semctl: Operation not permitted). The
-    # install itself succeeds; we verify via version.json.
-    "$BINARY" --install < /dev/tty || true
+    echo "── pip install -e . ──"
+    pip install -e .
 
-    if [[ ! -f "$INSTALL_DIR/version.json" ]]; then
-        err "Install failed — see errors above."
-        exit 1
-    fi
+    echo ""
+    echo "── fusion-cam --install (Fusion bridge add-in) ──"
+    fusion-cam --install
+
+    echo ""
+    info "Done."
+    echo ""
+    echo "Next steps:"
+    echo "  1. Open Fusion 360 → Scripts and Add-ins → run add-in: fusion-bridge"
+    echo "  2. Use the CLI:  source .venv/bin/activate && fusion-cam ping"
+    echo "  3. Cursor: keep .cursor/rules/fusion-cam-cli.mdc for agent guidance"
+    echo ""
 }
 
 main

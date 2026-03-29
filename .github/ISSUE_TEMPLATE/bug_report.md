@@ -13,7 +13,7 @@ A clear description of the bug.
 ## Steps to Reproduce
 
 1. Open Fusion 360 with document ...
-2. Call tool `...` with parameters ...
+2. Run `fusion-cam ...` with flags ...
 3. See error ...
 
 ## Expected Behavior
@@ -29,7 +29,7 @@ What actually happened. Include the full error message or unexpected output.
 - **OS**: (e.g. macOS 15.2, Windows 11)
 - **Fusion 360 version**: (e.g. 2.0.20xxx)
 - **Python version**: (e.g. 3.12.0)
-- **MCP server mode**: (read-only / full)
+- **CLI mode**: (default read-only / `--mode full` for writes)
 - **AI client**: (e.g. Cursor, Claude Desktop)
 
 ## Additional Context

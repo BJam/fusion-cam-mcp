@@ -1,135 +1,69 @@
-# Contributing to Fusion 360 CAM MCP Server
+# Contributing to Fusion 360 CAM CLI
 
-Thanks for your interest in contributing! This project aims to bridge AI assistants with Fusion 360's manufacturing/CAM capabilities through the Model Context Protocol.
+Thanks for your interest in contributing. This project connects assistants and scripts to Fusion 360 CAM through a **terminal CLI** and the **fusion-bridge** add-in (TCP bridge inside Fusion).
 
-## Architecture Overview
-
-Before contributing, it helps to understand the two-component architecture:
+## Architecture
 
 ```
-Cursor / Claude  --MCP (stdio)-->  MCP Server (Python)  --TCP-->  Fusion 360 Add-in  --adsk.cam API-->  Fusion 360
+Terminal  --fusion-cam-->  Python CLI (fusion_cam)  --TCP-->  Bridge add-in  --adsk.cam-->  Fusion 360
 ```
 
-- **MCP Server** (`fusion-cam-mcp-server/`) -- standalone Python process. All query logic lives in `queries/` as Python scripts.
-- **Fusion MCP Bridge** (`fusion-mcp-bridge/`) -- runs inside Fusion 360. This is a generic bridge (not CAM-specific) that executes Python scripts sent over TCP.
+- **Package** — `src/fusion_cam/`: `cli.py`, `cam_api.py`, `fusion_client.py`, `queries/`, `installer.py`, `debug_scripts/`.
+- **Bridge** — `fusion-bridge/`: runs inside Fusion. Generic TCP executor, not CAM-specific.
 
-The key insight: query scripts in `queries/` are sent to the bridge for execution inside Fusion 360. This means you can iterate on query logic by restarting the MCP server alone -- no Fusion restart needed.
+Query logic lives in `src/fusion_cam/queries/`. Iterating on queries usually means **re-running the CLI**; the bridge can stay up.
 
-## Development Setup
-
-1. Clone the repo and install dependencies:
+## Development setup
 
 ```bash
 git clone https://github.com/bjam/fusion-cam-mcp.git
 cd fusion-cam-mcp
-uv venv .venv
-uv pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+fusion-cam --install   # or add fusion-bridge/ manually in Fusion
 ```
 
-2. Install the Fusion MCP Bridge add-in (see README.md for instructions)
+The project is **stdlib-only**; `requirements.txt` only documents that. Builds use **Hatchling** (`pyproject.toml`). Release wheels bundle the add-in via `hatch_build.py` (standard builds only); editable installs use the repo’s `fusion-bridge/` for `--install`.
 
-3. Configure Cursor MCP settings to point at the server
+## Adding a read command
 
-## How to Add a New Read Tool
+### 1. Query module
 
-Most contributions will be adding new query tools. Here's the pattern:
+Add `src/fusion_cam/queries/my_query.py` with a `run(params)` function (or assign a result as in existing queries). Helpers come from the shared query layer (`_1_base`, etc.); follow neighboring files.
 
-### 1. Create the query script
+### 2. CLI wiring
 
-Add a new file in `fusion-cam-mcp-server/queries/`, e.g. `get_something.py`:
+Register a subcommand in `src/fusion_cam/cli.py`: handler that builds `params` and calls `session.run_query("my_query", params)` (see existing `_h_*` functions).
 
-```python
-# Params: document_name (optional), other_param (required)
-# Result: dict with your data
+### 3. Package exports
 
-document_name = params.get("document_name")
-cam, err = _get_cam(document_name)
-if err:
-    result = err
-else:
-    # Your Fusion 360 API logic here
-    # All helpers from _helpers.py are available
-    result = {"your_data": "here"}
-```
+If queries are discovered by name from the package, ensure the module is importable (same patterns as existing `queries/*.py`).
 
-The `_helpers.py` file is automatically prepended, giving you access to:
-- `_get_cam()`, `_get_document()` -- get Fusion objects
-- `_find_setup_by_name()`, `_find_operation_by_name()` -- lookups
-- `_read_param()`, `_safe_param_value()` -- parameter reading
-- All parameter name constants (`FEED_PARAMS`, `TOOL_GEOM_PARAMS`, etc.)
+## Adding a write command
 
-### 2. Register the MCP tool
+- Query must enforce safety consistent with other writes (e.g. edit-dialog checks in the bridge executor).
+- CLI must document **`--mode full`** in the subcommand help and pass mode through `CamSession` like other write handlers.
 
-Add a tool function in `fusion-cam-mcp-server/server.py`:
+## Style
 
-```python
-@mcp.tool()
-def get_something(
-    other_param: str,
-    document_name: Optional[str] = None,
-) -> str:
-    """
-    Docstring becomes the tool description visible to the AI.
-    Be specific about what data is returned and when to use this tool.
-    """
-    params = {"other_param": other_param}
-    if document_name:
-        params["document_name"] = document_name
+- One focused query module per operation family.
+- Return JSON-friendly dicts from bridge-side code.
+- Prefer existing helpers over duplicating Fusion API access.
+- No extra runtime dependencies in the bridge (Fusion’s Python).
 
-    response = _execute_query("get_something", params)
-    if not response.get("success"):
-        raise RuntimeError(response.get("error", "Failed"))
-    return _format_response(response)
-```
+## Pull requests
 
-### 3. Test it
+1. Fork and branch.
+2. Keep changes scoped.
+3. Update **README** command tables if you add user-facing commands.
+4. Add a **CHANGELOG** entry under `[Unreleased]`.
+5. Test against a real Fusion document when possible.
 
-1. Restart the MCP server (the bridge stays running)
-2. Ask the AI to call your new tool
-3. Verify the output
+## Issues
 
-## How to Add a New Write Tool
-
-Write tools follow the same pattern but with two additions:
-
-1. Call `_require_write_mode()` at the top to enforce `--mode full`
-2. Use `_capture_param_snapshot()` + `_build_diff()` to return before/after diffs
-
-See `update_operation_params.py` for the canonical example.
-
-## Adding New Parameter Categories
-
-If you find Fusion 360 CAM parameters that should be explicitly categorized:
-
-1. Add the parameter mapping dict in `_helpers.py` (follow the existing pattern)
-2. Add it to `ALL_PARAM_CATEGORIES` so `get_operation_details` picks it up automatically
-3. Parameters not in any category still appear in the "other" bucket
-
-## Code Style
-
-- Keep query scripts focused -- one script per tool
-- Use `try/except` around Fusion API calls (they can throw for many reasons)
-- Return structured dicts, not formatted strings
-- Prefer `_read_param()` over direct parameter access for safety
-- No external dependencies in the bridge (it runs inside Fusion's Python environment)
-
-## Pull Requests
-
-1. Fork the repo and create a feature branch
-2. Keep changes focused -- one feature or fix per PR
-3. Update the README tool table if adding new tools
-4. Add a CHANGELOG entry under `[Unreleased]`
-5. Test with an actual Fusion 360 document if possible
-
-## Reporting Issues
-
-When reporting bugs, please include:
-- Fusion 360 version
-- Operating system
-- MCP server mode (read-only or full)
-- The tool call that failed
-- Error message or unexpected output
+Include Fusion version, OS, `fusion-cam …` command, and the JSON error payload if any.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+Contributions are under the [MIT License](LICENSE).

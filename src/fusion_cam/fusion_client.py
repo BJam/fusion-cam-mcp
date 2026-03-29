@@ -1,5 +1,5 @@
 """
-TCP client for communicating with the Fusion MCP Bridge.
+TCP client for the Fusion bridge add-in (localhost TCP).
 
 Sends newline-delimited JSON requests over TCP and reads JSON responses.
 """
@@ -14,17 +14,21 @@ DEFAULT_TIMEOUT = 30.0
 
 
 def get_port():
-    """Return the configured TCP port."""
-    try:
-        return int(os.environ.get("FUSION_CAM_MCP_PORT", DEFAULT_PORT))
-    except (ValueError, TypeError):
-        return DEFAULT_PORT
+    """Return the configured TCP port (FUSION_CAM_BRIDGE_PORT, else legacy FUSION_CAM_MCP_PORT)."""
+    for key in ("FUSION_CAM_BRIDGE_PORT", "FUSION_CAM_MCP_PORT"):
+        raw = os.environ.get(key)
+        if raw is not None and raw != "":
+            try:
+                return int(raw)
+            except (ValueError, TypeError):
+                continue
+    return DEFAULT_PORT
 
 
 class FusionClient:
     """
-    TCP client that connects to the Fusion MCP Bridge.
-    Maintains a persistent connection for the lifetime of the MCP server.
+    TCP client for the Fusion bridge add-in.
+    Maintains a persistent connection for the lifetime of the CLI process.
     """
 
     def __init__(self, host=None, port=None, timeout=None):
@@ -45,7 +49,7 @@ class FusionClient:
         except (ConnectionRefusedError, socket.timeout, OSError) as e:
             self._socket = None
             raise ConnectionError(
-                f"Cannot connect to Fusion MCP Bridge at "
+                f"Cannot connect to Fusion bridge at "
                 f"{self._host}:{self._port}. "
                 f"Make sure Fusion 360 is running and the bridge is started. "
                 f"Error: {e}"
@@ -94,7 +98,7 @@ class FusionClient:
                 if attempt == 0:
                     continue  # Retry once
                 raise ConnectionError(
-                    f"Lost connection to Fusion MCP Bridge: {e}"
+                    f"Lost connection to Fusion bridge: {e}"
                 )
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON response from add-in: {e}")

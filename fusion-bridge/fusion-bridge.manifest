@@ -1,10 +1,10 @@
 {
     "autodeskProduct": "Fusion",
     "type": "addin",
-    "id": "fusion-mcp-bridge",
+    "id": "fusion-bridge",
     "author": "",
     "description": {
-        "": "Generic Fusion 360 add-in that bridges MCP servers to the Fusion API over a local TCP socket. Executes Python scripts on the main thread via CustomEvent."
+        "": "Generic Fusion 360 add-in: local TCP bridge to the Fusion API. Executes Python from clients (e.g. fusion-cam CLI) on the main thread via CustomEvent."
     },
     "version": "0.1.0",
     "runOnStartup": false,

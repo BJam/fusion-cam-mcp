@@ -1,2 +1,2 @@
-mcp>=1.0.0
-pydantic>=2.0.0
+# fusion-cam is stdlib-only. Install the package (editable from a clone):
+#   python3 -m venv .venv && .venv/bin/pip install -e .

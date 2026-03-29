@@ -1,5 +1,5 @@
 """
-TCP server for the Fusion MCP Bridge.
+TCP server for the Fusion bridge add-in.
 
 Runs a TCP listener in a background thread. Each incoming request is a
 newline-delimited JSON object. The request is dispatched to a handler
@@ -27,11 +27,15 @@ _MAX_RESTARTS = 10      # consecutive failures before giving up
 
 
 def get_port():
-    """Return the configured TCP port."""
-    try:
-        return int(os.environ.get("FUSION_CAM_MCP_PORT", DEFAULT_PORT))
-    except (ValueError, TypeError):
-        return DEFAULT_PORT
+    """Return the configured TCP port (FUSION_CAM_BRIDGE_PORT, else legacy FUSION_CAM_MCP_PORT)."""
+    for key in ("FUSION_CAM_BRIDGE_PORT", "FUSION_CAM_MCP_PORT"):
+        raw = os.environ.get(key)
+        if raw is not None and raw != "":
+            try:
+                return int(raw)
+            except (ValueError, TypeError):
+                continue
+    return DEFAULT_PORT
 
 
 class JsonTcpServer:

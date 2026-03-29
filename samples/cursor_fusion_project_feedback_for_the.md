@@ -99,7 +99,7 @@ I'll start with the feeds and speeds changes on both operations.
 
 All the feeds, speeds, and engagement changes are applied. Here's a summary of what was changed:
 
-### Changes applied via MCP
+### Changes applied via fusion-cam (CLI)
 
 **2D Adaptive1 (roughing):**
 | Parameter | Before | After |
@@ -124,7 +124,7 @@ All the feeds, speeds, and engagement changes are applied. Here's a summary of w
 
 ### 3 things you need to toggle manually in Fusion
 
-The MCP write tool only supports feeds/speeds/engagement parameters -- it can't flip boolean toggles or change linking geometry. You'll need to do these by hand:
+The fusion-cam write path only supports feeds/speeds/engagement parameters -- it can't flip boolean toggles or change linking geometry. You'll need to do these by hand:
 
 1. **Enable tabs on `2D Contour1`** -- Edit the operation, go to the **Passes** tab, check **Tabs**. Set width to ~3 mm, height to ~1 mm, and use "By Distance" with ~60 mm spacing (should give you 3-4 tabs around the coaster).
 
@@ -154,7 +154,7 @@ Regarding **lead-in/lead-out radii**: with your current values at 0.3175 mm (10%
 
 That said, for a coaster in plywood with a tape-and-glue fixture, this is a pretty minor cosmetic detail. The entry mark would likely sand out in seconds. So it's entirely optional -- skip it if you don't want to fuss with it.
 
-All the MCP changes are done. Once you've toggled on **Multiple Depths** in the Passes tab of `2D Contour1`, you should be ready to regenerate toolpaths. Want me to kick that off?
+All the CLI parameter changes are done. Once you've toggled on **Multiple Depths** in the Passes tab of `2D Contour1`, you should be ready to regenerate toolpaths. Want me to kick that off?
 
 ---
 

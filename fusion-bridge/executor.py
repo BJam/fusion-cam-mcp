@@ -1,12 +1,12 @@
 """
-Generic Python script executor for the Fusion MCP Bridge.
+Generic Python script executor for the Fusion bridge add-in.
 
 Replaces the handler-per-action pattern (cam_handler.py) with a thin
-exec() engine. The MCP server sends Python scripts over TCP; this module
-executes them on the Fusion main thread with the adsk SDK available in
+exec() engine. Local clients (e.g. fusion-cam) send Python scripts over TCP;
+this module executes them on the Fusion main thread with the adsk SDK available in
 the namespace.
 
-All business logic now lives on the MCP server side in queries/*.py.
+Business logic for CAM queries lives in the CLI package (`fusion_cam.queries`).
 The addin is just a "run this code on the main thread" proxy.
 """
 
@@ -52,7 +52,7 @@ def execute_request(request):
         namespace = {
             # Fusion SDK top-level modules
             "adsk": adsk,
-            # Input parameters from the MCP server
+            # Input parameters from the TCP client
             "params": params,
             # The script sets this to its return value
             "result": None,
